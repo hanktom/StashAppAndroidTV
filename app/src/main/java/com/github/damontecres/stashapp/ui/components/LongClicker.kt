@@ -1,16 +1,21 @@
 package com.github.damontecres.stashapp.ui.components
 
+import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import com.apollographql.apollo.api.Optional
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.SlimSceneData
 import com.github.damontecres.stashapp.api.fragment.StashData
+import com.github.damontecres.stashapp.api.type.FindFilterType
+import com.github.damontecres.stashapp.api.type.TagCreateInput
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.filter.extractTitle
 import com.github.damontecres.stashapp.navigation.Destination
@@ -19,9 +24,18 @@ import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.playback.PlaybackMode
 import com.github.damontecres.stashapp.ui.pages.DialogParams
 import com.github.damontecres.stashapp.ui.pages.MAX_PLAYLIST_SIZE
+import com.github.damontecres.stashapp.util.MutationEngine
+import com.github.damontecres.stashapp.util.QueryEngine
+import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
+import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.readOnlyModeDisabled
 import com.github.damontecres.stashapp.util.resume_position
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 fun interface LongClicker<T> {
     fun longClick(
@@ -132,6 +146,21 @@ class DefaultLongClicker(
                         )
                     }
                 }
+                if (item is SlimSceneData &&
+                    readOnlyModeDisabled() &&
+                    item.tags.none {
+                        it.slimTagData.name.startsWith(SUBS_TAG_PREFIX, ignoreCase = true)
+                    }
+                ) {
+                    add(
+                        DialogItem(
+                            "加入字幕佇列 ($SUBS_PENDING_TAG)",
+                            Icons.Default.Add,
+                        ) {
+                            addSubsPendingTag(item)
+                        },
+                    )
+                }
                 if ((item is SlimSceneData || item is MarkerData) &&
                     filterAndPosition != null &&
                     filterAndPosition.position < MAX_PLAYLIST_SIZE // TODO
@@ -219,3 +248,39 @@ fun buildLongClickActionList(
             },
         ),
     )
+
+
+/** 字幕佇列 tag（lada-batch file-monitor 會掃描並排入 SUBGEN 字幕任務） */
+private const val SUBS_PENDING_TAG = "subs:pending"
+
+/** 已帶任何 subs:* tag（pending/done/failed）就不再顯示選項 */
+private const val SUBS_TAG_PREFIX = "subs:"
+
+/** 幫 scene 加上 subs:pending tag（tag 不存在會自動建立）。 */
+private fun addSubsPendingTag(item: SlimSceneData) {
+    val context = StashApplication.getApplication()
+    CoroutineScope(Dispatchers.IO).launch(
+        StashCoroutineExceptionHandler(
+            Toast.makeText(context, "加入字幕佇列失敗", Toast.LENGTH_SHORT),
+        ),
+    ) {
+        val server = StashServer.requireCurrentServer()
+        val queryEngine = QueryEngine(server)
+        val mutationEngine = MutationEngine(server)
+        val tagId =
+            queryEngine
+                .findTags(FindFilterType(q = Optional.present(SUBS_PENDING_TAG)))
+                .firstOrNull { it.name.equals(SUBS_PENDING_TAG, ignoreCase = true) }
+                ?.id
+                ?: mutationEngine.createTag(TagCreateInput(name = SUBS_PENDING_TAG))!!.id
+        mutationEngine.setTagsOnScene(
+            item.id,
+            item.tags.map { it.slimTagData.id } + tagId,
+        )
+        withContext(Dispatchers.Main) {
+            Toast
+                .makeText(context, "已加入字幕佇列：$SUBS_PENDING_TAG", Toast.LENGTH_SHORT)
+                .show()
+        }
+    }
+}

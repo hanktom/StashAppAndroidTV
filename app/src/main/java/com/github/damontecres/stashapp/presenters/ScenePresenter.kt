@@ -1,20 +1,32 @@
 package com.github.damontecres.stashapp.presenters
 
 import android.graphics.Typeface
+import android.widget.Toast
+import com.apollographql.apollo.api.Optional
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.fragment.SlimSceneData
+import com.github.damontecres.stashapp.api.type.FindFilterType
+import com.github.damontecres.stashapp.api.type.TagCreateInput
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.playback.PlaybackMode
+import com.github.damontecres.stashapp.util.MutationEngine
+import com.github.damontecres.stashapp.util.QueryEngine
+import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.concatIfNotBlank
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
+import com.github.damontecres.stashapp.util.readOnlyModeDisabled
 import com.github.damontecres.stashapp.util.resolutionName
 import com.github.damontecres.stashapp.util.resume_position
 import com.github.damontecres.stashapp.util.titleOrFilename
 import com.github.damontecres.stashapp.views.durationToString
 import java.util.EnumMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ScenePresenter(
     callback: LongClickCallBack<SlimSceneData>? = null,
@@ -113,10 +125,53 @@ class ScenePresenter(
                         PlaybackMode.Choose,
                     ),
                 )
+            }.addAction(
+                PopUpItem(5, "加入字幕佇列 ($SUBS_PENDING_TAG)"),
+                { item ->
+                    readOnlyModeDisabled() &&
+                        item.tags.none {
+                            it.slimTagData.name.startsWith(SUBS_TAG_PREFIX, ignoreCase = true)
+                        }
+                },
+            ) { cardView, item ->
+                val context = cardView.context
+                CoroutineScope(Dispatchers.IO).launch(
+                    StashCoroutineExceptionHandler(
+                        Toast.makeText(context, "加入字幕佇列失敗", Toast.LENGTH_SHORT),
+                    ),
+                ) {
+                    val server = StashServer.requireCurrentServer()
+                    val queryEngine = QueryEngine(server)
+                    val mutationEngine = MutationEngine(server)
+                    val tagId =
+                        queryEngine
+                            .findTags(FindFilterType(q = Optional.present(SUBS_PENDING_TAG)))
+                            .firstOrNull { it.name.equals(SUBS_PENDING_TAG, ignoreCase = true) }
+                            ?.id
+                            ?: mutationEngine.createTag(TagCreateInput(name = SUBS_PENDING_TAG))!!.id
+                    mutationEngine.setTagsOnScene(
+                        item.id,
+                        item.tags.map { it.slimTagData.id } + tagId,
+                    )
+                    withContext(Dispatchers.Main) {
+                        Toast
+                            .makeText(
+                                context,
+                                "已加入字幕佇列：$SUBS_PENDING_TAG",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                    }
+                }
             }
 
     companion object {
         private const val TAG = "ScenePresenter"
+
+        /** 字幕佇列 tag（lada-batch file-monitor 會掃描並排入 SUBGEN 任務） */
+        private const val SUBS_PENDING_TAG = "subs:pending"
+
+        /** 已帶任何 subs:* tag（pending/done/failed）就不再顯示選項 */
+        private const val SUBS_TAG_PREFIX = "subs:"
 
         const val CARD_WIDTH = 345
         const val CARD_HEIGHT = 194
