@@ -11,11 +11,15 @@ import com.github.damontecres.stashapp.api.type.TagCreateInput
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.playback.PlaybackMode
+import com.github.damontecres.stashapp.ui.showAddGroup
+import com.github.damontecres.stashapp.ui.showShort
 import com.github.damontecres.stashapp.util.MutationEngine
 import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.addSceneToGroup
 import com.github.damontecres.stashapp.util.concatIfNotBlank
+import com.github.damontecres.stashapp.util.findGroupsNotInScene
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import com.github.damontecres.stashapp.util.readOnlyModeDisabled
 import com.github.damontecres.stashapp.util.resolutionName
@@ -160,6 +164,30 @@ class ScenePresenter(
                                 "已加入字幕佇列：$SUBS_PENDING_TAG",
                                 Toast.LENGTH_SHORT,
                             ).show()
+                    }
+                }
+            }.addAction(
+                PopUpItem(6L, R.string.add_group),
+                { readOnlyModeDisabled() },
+            ) { cardView, item ->
+                val context = StashApplication.getApplication()
+                val scope =
+                    CoroutineScope(Dispatchers.Main + StashCoroutineExceptionHandler(autoToast = true))
+                scope.launch {
+                    val server = StashServer.requireCurrentServer()
+                    val groups = findGroupsNotInScene(QueryEngine(server), item)
+                    if (groups.isEmpty()) {
+                        showShort(context.getString(R.string.no_groups_to_add))
+                    } else {
+                        PopupOnLongClickListener(
+                            groups.map { it.name },
+                        ) { _, _, position, _ ->
+                            val group = groups[position]
+                            scope.launch {
+                                addSceneToGroup(MutationEngine(server), item, group.id)
+                                showAddGroup(group)
+                            }
+                        }.onLongClick(cardView)
                     }
                 }
             }

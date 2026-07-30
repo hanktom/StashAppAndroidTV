@@ -8,6 +8,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -104,12 +105,14 @@ fun ApplicationContent(
 
     var dialogParams by remember { mutableStateOf<DialogParams?>(null) }
     var showMarkerDialog by remember { mutableStateOf<FilterAndPosition?>(null) }
+    val scope = rememberCoroutineScope()
     val longClicker =
         remember {
             DefaultLongClicker(
                 navigationManager,
                 itemOnClick,
                 server.serverPreferences.alwaysStartFromBeginning,
+                scope,
                 markerPlayAllOnClick = { showMarkerDialog = it },
             ) { dialogParams = it }
         }
@@ -284,7 +287,7 @@ fun ApplicationContent(
                 dialogItems = params.items,
                 onDismissRequest = { dialogParams = null },
                 dismissOnClick = true,
-                waitToLoad = true,
+                waitToLoad = params.fromLongClick,
                 properties = DialogProperties(),
             )
         }

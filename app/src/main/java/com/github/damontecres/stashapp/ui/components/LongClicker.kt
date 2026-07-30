@@ -24,10 +24,14 @@ import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.playback.PlaybackMode
 import com.github.damontecres.stashapp.ui.pages.DialogParams
 import com.github.damontecres.stashapp.ui.pages.MAX_PLAYLIST_SIZE
+import com.github.damontecres.stashapp.ui.showAddGroup
+import com.github.damontecres.stashapp.ui.showShort
 import com.github.damontecres.stashapp.util.MutationEngine
 import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.addSceneToGroup
+import com.github.damontecres.stashapp.util.findGroupsNotInScene
 import com.github.damontecres.stashapp.util.readOnlyModeDisabled
 import com.github.damontecres.stashapp.util.resume_position
 import java.util.concurrent.atomic.AtomicInteger
@@ -48,6 +52,7 @@ class DefaultLongClicker(
     private val nav: NavigationManager,
     private val itemOnClick: ItemOnClicker<Any>,
     private val alwaysStartFromBeginning: Boolean,
+    private val scope: CoroutineScope,
     private val markerPlayAllOnClick: (FilterAndPosition) -> Unit,
     private val onLongClick: (DialogParams) -> Unit,
 ) : LongClicker<Any> {
@@ -158,6 +163,44 @@ class DefaultLongClicker(
                             Icons.Default.Add,
                         ) {
                             addSubsPendingTag(item)
+                        },
+                    )
+                }
+                if (item is SlimSceneData && readOnlyModeDisabled()) {
+                    add(
+                        DialogItem(
+                            context.getString(R.string.add_group),
+                            DataType.GROUP.iconStringId,
+                        ) {
+                            scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                                val server = StashServer.requireCurrentServer()
+                                val groups = findGroupsNotInScene(QueryEngine(server), item)
+                                if (groups.isEmpty()) {
+                                    showShort(context.getString(R.string.no_groups_to_add))
+                                } else {
+                                    onLongClick.invoke(
+                                        DialogParams(
+                                            fromLongClick = false,
+                                            title = context.getString(R.string.add_group),
+                                            items =
+                                                groups.map { group ->
+                                                    DialogItem(group.name) {
+                                                        scope.launch(
+                                                            StashCoroutineExceptionHandler(autoToast = true),
+                                                        ) {
+                                                            addSceneToGroup(
+                                                                MutationEngine(server),
+                                                                item,
+                                                                group.id,
+                                                            )
+                                                            showAddGroup(group)
+                                                        }
+                                                    }
+                                                },
+                                        ),
+                                    )
+                                }
+                            }
                         },
                     )
                 }
