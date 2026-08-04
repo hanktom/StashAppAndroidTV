@@ -188,6 +188,7 @@ class PlaybackViewModel :
     ) {
         this.server = server
         this.player = player
+        this.uiConfig = uiConfig
         this.trackActivity = trackActivity
         this.markersEnabled = markersEnabled
         this.saveFilters = saveFilters
