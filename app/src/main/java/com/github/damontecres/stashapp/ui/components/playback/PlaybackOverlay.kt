@@ -179,6 +179,7 @@ fun PlaybackOverlay(
     var seekProgress by remember { mutableFloatStateOf(-1f) }
     val seekBarFocused by seekBarInteractionSource.collectIsFocusedAsState()
     var seekBarDragging by remember { mutableStateOf(false) }
+    var thumbnailStripFocused by remember { mutableStateOf(false) }
 
     val imageLoader = SingletonImageLoader.get(LocalPlatformContext.current)
 
@@ -412,7 +413,30 @@ fun PlaybackOverlay(
                 }
             }
         }
-        AnimatedVisibility(seekPreviewEnabled && seekProgress >= 0 && (seekBarFocused || seekBarDragging)) {
+        AnimatedVisibility(
+            seekPreviewEnabled &&
+                spriteData.isNotEmpty() &&
+                (seekBarFocused || seekBarDragging || thumbnailStripFocused),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 170.dp),
+        ) {
+            SeekThumbnailStrip(
+                imageLoader = imageLoader,
+                seekProgress = if (seekBarFocused || seekBarDragging) seekProgress else -1f,
+                duration = playerControls.duration,
+                currentPosition = playerControls.currentPosition,
+                spriteData = spriteData,
+                onJump = {
+                    playerControls.seekTo(it)
+                    controllerViewState.pulseControls()
+                },
+                onFocusChanged = { thumbnailStripFocused = it },
+                onInteraction = { controllerViewState.pulseControls() },
+            )
+        }
+        AnimatedVisibility(seekPreviewEnabled && spriteData.isEmpty() && seekProgress >= 0 && (seekBarFocused || seekBarDragging)) {
             LaunchedEffect(Unit) {
                 seekProgress = playerControls.currentPosition.toFloat() / playerControls.duration
             }
