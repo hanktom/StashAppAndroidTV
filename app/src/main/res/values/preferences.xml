@@ -33,6 +33,7 @@
     <string name="pref_key_video_filters" translatable="false">playback.videoFilters</string>
     <string name="pref_key_skip_forward_time" translatable="false">skip_forward_time</string>
     <string name="pref_key_skip_back_time" translatable="false">skip_back_time</string>
+    <string name="pref_key_seek_bar_steps" translatable="false">seek_bar_steps</string>
     <string name="pref_key_skip_with_dpad" translatable="false">skipWithDpad</string>
     <string name="pref_key_playback_finished_behavior" translatable="false">playbackFinishedBehavior</string>
     <string name="pref_key_show_dpad_skip" translatable="false">playback.showDpadSkip</string>

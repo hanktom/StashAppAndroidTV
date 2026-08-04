@@ -142,6 +142,7 @@
     <string name="play_video_previews_summary_off">Video previews will not play</string>
     <string name="skip_forward_preference">Skip forward (seconds)</string>
     <string name="skip_back_preference">Skip back (seconds)</string>
+    <string name="seek_bar_steps_preference">Seek bar steps</string>
     <string name="playback_finished_behavior">Playback finished behavior</string>
     <string name="auto_submit_pin">Auto submit PIN</string>
     <string name="auto_submit_pin_summary">Submit PIN automatically when typed</string>

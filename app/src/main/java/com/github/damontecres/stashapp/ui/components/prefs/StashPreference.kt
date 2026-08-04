@@ -224,6 +224,28 @@ sealed interface StashPreference<T> {
                     }
                 },
             )
+        val SeekBarSteps =
+            StashSliderPreference(
+                title = R.string.seek_bar_steps_preference,
+                prefKey = R.string.pref_key_seek_bar_steps,
+                defaultValue = 16,
+                min = 4,
+                max = 100,
+                interval = 2,
+                getter = { it.playbackPreferences.seekBarSteps },
+                setter = { prefs, value ->
+                    prefs.updatePlaybackPreferences {
+                        seekBarSteps = value
+                    }
+                },
+                summarizer = { value ->
+                    if (value != null) {
+                        "$value steps"
+                    } else {
+                        null
+                    }
+                },
+            )
         val FinishedBehavior =
             StashChoicePreference<PlaybackFinishBehavior>(
                 title = R.string.playback_finished_behavior,

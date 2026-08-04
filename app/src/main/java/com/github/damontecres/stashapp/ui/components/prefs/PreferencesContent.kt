@@ -85,6 +85,7 @@ val basicPreferences =
             listOf(
                 StashPreference.SkipForward,
                 StashPreference.SkipBack,
+                StashPreference.SeekBarSteps,
                 StashPreference.FinishedBehavior,
             ),
         ),
