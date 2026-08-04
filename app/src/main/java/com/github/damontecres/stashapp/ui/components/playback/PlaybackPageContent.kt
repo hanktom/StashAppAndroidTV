@@ -489,7 +489,10 @@ class PlaybackViewModel :
                 val sceneSubtitlesActivated = state.value.scene?.id
                 val languageCode = Locale.getDefault().language
                 val subtitleIndex =
-                    captions.indexOfFirstOrNull { it.format.language == languageCode }?.let {
+                    (
+                        captions.indexOfFirstOrNull { isChineseLanguage(it.format.language) }
+                            ?: captions.indexOfFirstOrNull { it.format.language == languageCode }
+                    )?.let {
                         Timber.v("Found default subtitle track for $languageCode: $it")
                         withContext(Dispatchers.Main) {
                             if (toggleSubtitles(player, null, it)) {
@@ -1302,6 +1305,15 @@ class PlaybackKeyHandler(
         }
         return result
     }
+}
+
+/**
+ * Whether a track language code refers to Chinese, tolerating the ISO 639-1/639-2 and
+ * regional variants seen in Stash caption files (zh, zh-CN, zh-TW, zho, chi, cmn)
+ */
+fun isChineseLanguage(language: String?): Boolean {
+    val lang = language?.lowercase() ?: return false
+    return lang.startsWith("zh") || lang in setOf("chi", "zho", "cmn")
 }
 
 @OptIn(UnstableApi::class)
