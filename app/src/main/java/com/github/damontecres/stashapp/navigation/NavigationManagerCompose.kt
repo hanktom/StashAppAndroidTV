@@ -45,7 +45,13 @@ class NavigationManagerCompose(
         if (controller != null) {
             serverViewModel.command.value = null
             if (popUpToMain) {
-                controller!!.popUpTo { it == Destination.Main }
+                val poppedUpToMain = controller!!.popUpTo { it == Destination.Main }
+                if (!poppedUpToMain && destination == Destination.Main) {
+                    // Destination.Main may no longer be in the backstack (e.g. it was replaced
+                    // by the initial redirect to the default page), so make sure navigating to
+                    // Main still works
+                    controller!!.navigate(Destination.Main)
+                }
             }
             if (destination != Destination.Main) {
                 controller!!.navigate(destination)

@@ -49,7 +49,7 @@ enum class DataType(
         R.string.stashapp_scene,
         R.string.stashapp_scenes,
         R.string.fa_circle_play,
-        SortAndDirection(SortOption.Date, SortDirectionEnum.DESC),
+        SortAndDirection(SortOption.CreatedAt, SortDirectionEnum.DESC),
         SortOption.SCENE_SORT_OPTIONS,
     ),
     GROUP(

@@ -128,7 +128,9 @@ fun ApplicationContent(
             )
             add(DrawerPage.SettingPage)
         }
-    val defaultSelection: DrawerPage = DrawerPage.HomePage
+    val defaultSelection: DrawerPage =
+        pages.firstOrNull { it is DrawerPage.DataTypePage && it.dataType == DataType.SCENE }
+            ?: DrawerPage.HomePage
     var selectedScreen by rememberSaveable { mutableStateOf<DrawerPage?>(defaultSelection) }
 
     // TODO Using AnimatedNavHost breaks the grid focus restoration

@@ -24,6 +24,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.tv.material3.MaterialTheme
 import coil3.annotation.ExperimentalCoilApi
 import com.github.damontecres.stashapp.R
+import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.navigation.Destination
 import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
 import com.github.damontecres.stashapp.ui.components.server.InitialSetup
@@ -76,7 +77,19 @@ class NavDrawerFragment : Fragment(R.layout.compose_frame) {
                         }
                     AppTheme(colorScheme = colorScheme) {
                         key(server) {
-                            val navController = rememberNavController<Destination>(Destination.Main)
+                            // Start the app on the Scenes page rather than Home. Falls back to
+                            // Home if there is no server yet or the server hides Scenes from the menu.
+                            val startDestination =
+                                remember(server) {
+                                    server
+                                        ?.takeIf { it.serverPreferences.showMenuItem(DataType.SCENE) }
+                                        ?.let {
+                                            Destination.Filter(
+                                                it.serverPreferences.getDefaultFilter(DataType.SCENE),
+                                            )
+                                        } ?: Destination.Main
+                                }
+                            val navController = rememberNavController<Destination>(startDestination)
                             this@NavDrawerFragment.navController = navController
                             NavBackHandler(navController)
                             val navManager =
