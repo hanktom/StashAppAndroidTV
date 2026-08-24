@@ -164,6 +164,13 @@ message ScreensaverPreferences {
   bool enabled = 1;
 }
 
+message RecentActionPreferences {
+  // which long-click action was used last on a scene
+  string scene_action_kind = 1;   // "" = none, "ADD_TO_GROUP", "SUBS_TAG"
+  string scene_action_target_id = 2;   // group id for ADD_TO_GROUP, else ""
+  string scene_action_target_name = 3; // group name for the menu label, else ""
+}
+
 message StashPreferences {
   PinPreferences pin_preferences = 1;
   InterfacePreferences interface_preferences = 2;
@@ -173,6 +180,7 @@ message StashPreferences {
   AdvancedPreferences advanced_preferences = 6;
   SearchPreferences search_preferences = 7;
   ScreensaverPreferences screensaver_preferences = 9;
+  RecentActionPreferences recent_action_preferences = 10;
 
   bool preferences_migrated_v1 = 8;
 }

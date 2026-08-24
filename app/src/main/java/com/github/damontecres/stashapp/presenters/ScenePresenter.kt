@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.presenters
 
+import android.content.Context
 import android.graphics.Typeface
 import android.widget.Toast
 import com.apollographql.apollo.api.Optional
@@ -17,6 +18,7 @@ import com.github.damontecres.stashapp.util.MutationEngine
 import com.github.damontecres.stashapp.util.QueryEngine
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.SubsQueueOverrides
 import com.github.damontecres.stashapp.util.addSceneToGroup
 import com.github.damontecres.stashapp.util.concatIfNotBlank
 import com.github.damontecres.stashapp.util.findGroupsNotInScene
@@ -131,40 +133,40 @@ class ScenePresenter(
                 )
             }.addAction(
                 PopUpItem(5, "加入字幕佇列 ($SUBS_PENDING_TAG)"),
-                { item ->
-                    readOnlyModeDisabled() &&
-                        item.tags.none {
-                            it.slimTagData.name.startsWith(SUBS_TAG_PREFIX, ignoreCase = true)
-                        }
-                },
+                { item -> readOnlyModeDisabled() && subsQueueAction(item) == SubsQueueAction.ADD },
             ) { cardView, item ->
-                val context = cardView.context
-                CoroutineScope(Dispatchers.IO).launch(
-                    StashCoroutineExceptionHandler(
-                        Toast.makeText(context, "加入字幕佇列失敗", Toast.LENGTH_SHORT),
-                    ),
-                ) {
-                    val server = StashServer.requireCurrentServer()
-                    val queryEngine = QueryEngine(server)
-                    val mutationEngine = MutationEngine(server)
+                var addedTagId: String? = null
+                updateSubsPendingTag(
+                    cardView.context,
+                    item.id,
+                    failureMessage = "加入字幕佇列失敗",
+                    successMessage = "已加入字幕佇列：$SUBS_PENDING_TAG",
+                    onSuccess = { addedTagId?.let { SubsQueueOverrides.setAdded(item.id, it) } },
+                ) { queryEngine, mutationEngine ->
                     val tagId =
                         queryEngine
                             .findTags(FindFilterType(q = Optional.present(SUBS_PENDING_TAG)))
                             .firstOrNull { it.name.equals(SUBS_PENDING_TAG, ignoreCase = true) }
                             ?.id
                             ?: mutationEngine.createTag(TagCreateInput(name = SUBS_PENDING_TAG))!!.id
-                    mutationEngine.setTagsOnScene(
-                        item.id,
-                        item.tags.map { it.slimTagData.id } + tagId,
-                    )
-                    withContext(Dispatchers.Main) {
-                        Toast
-                            .makeText(
-                                context,
-                                "已加入字幕佇列：$SUBS_PENDING_TAG",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                    }
+                    addedTagId = tagId
+                    // item.tags can be stale (the grid is never refreshed after a mutation), so
+                    // guard against sending the same id twice
+                    (item.tags.map { it.slimTagData.id } + tagId).distinct()
+                }
+            }.addAction(
+                PopUpItem(5, "移除字幕佇列 ($SUBS_PENDING_TAG)"),
+                { item -> readOnlyModeDisabled() && subsQueueAction(item) == SubsQueueAction.REMOVE },
+            ) { cardView, item ->
+                val tagId = subsQueuePendingTagId(item)!!
+                updateSubsPendingTag(
+                    cardView.context,
+                    item.id,
+                    failureMessage = "移除字幕佇列失敗",
+                    successMessage = "已移出字幕佇列：$SUBS_PENDING_TAG",
+                    onSuccess = { SubsQueueOverrides.setRemoved(item.id) },
+                ) { _, _ ->
+                    item.tags.map { it.slimTagData.id }.filterNot { it == tagId }
                 }
             }.addAction(
                 PopUpItem(6L, R.string.add_group),
@@ -203,5 +205,68 @@ class ScenePresenter(
 
         const val CARD_WIDTH = 345
         const val CARD_HEIGHT = 194
+
+        /** Which subs:pending action (if any) the long-click menu should offer for this scene. */
+        private enum class SubsQueueAction { ADD, REMOVE, NONE }
+
+        /**
+         * The scene's subs:pending tag id, preferring any override recorded this session over the
+         * (possibly stale) tag id found on [item].
+         */
+        private fun subsQueuePendingTagId(item: SlimSceneData): String? =
+            SubsQueueOverrides.pendingTagId(
+                item.id,
+                item.tags
+                    .firstOrNull { it.slimTagData.name.equals(SUBS_PENDING_TAG, ignoreCase = true) }
+                    ?.slimTagData
+                    ?.id,
+            )
+
+        /**
+         * Decides whether to offer 加入/移除 for this scene: already in the queue shows remove; no
+         * other subs:* tag yet shows add; already in another subs:* state (e.g. subs:done) shows
+         * neither. Shared by both filters so they cannot drift apart.
+         */
+        private fun subsQueueAction(item: SlimSceneData): SubsQueueAction {
+            val pendingTagId = subsQueuePendingTagId(item)
+            val hasOtherSubsTag =
+                item.tags.any {
+                    it.slimTagData.name.startsWith(SUBS_TAG_PREFIX, ignoreCase = true) &&
+                        !it.slimTagData.name.equals(SUBS_PENDING_TAG, ignoreCase = true)
+                }
+            return when {
+                pendingTagId != null -> SubsQueueAction.REMOVE
+                !hasOtherSubsTag -> SubsQueueAction.ADD
+                else -> SubsQueueAction.NONE
+            }
+        }
+
+        /** 更新 scene 的 tag 列表，並在成功/失敗時顯示對應的 toast。 */
+        private fun updateSubsPendingTag(
+            context: Context,
+            sceneId: String,
+            failureMessage: String,
+            successMessage: String,
+            onSuccess: () -> Unit = {},
+            newTagIds: suspend (QueryEngine, MutationEngine) -> List<String>,
+        ) {
+            CoroutineScope(Dispatchers.IO).launch(
+                StashCoroutineExceptionHandler(
+                    Toast.makeText(context, failureMessage, Toast.LENGTH_SHORT),
+                ),
+            ) {
+                val server = StashServer.requireCurrentServer()
+                val queryEngine = QueryEngine(server)
+                val mutationEngine = MutationEngine(server)
+                mutationEngine.setTagsOnScene(
+                    sceneId,
+                    newTagIds(queryEngine, mutationEngine),
+                )
+                onSuccess()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 }

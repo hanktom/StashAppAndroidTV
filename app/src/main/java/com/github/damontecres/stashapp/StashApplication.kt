@@ -21,9 +21,14 @@ import com.github.damontecres.stashapp.data.room.MIGRATION_4_TO_5
 import com.github.damontecres.stashapp.navigation.NavigationManager
 import com.github.damontecres.stashapp.util.AppUpgradeHandler
 import com.github.damontecres.stashapp.util.QueryEngine
+import com.github.damontecres.stashapp.util.RecentSceneActionStore
+import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.Version
 import dev.b3nedikt.restring.Restring
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.acra.ACRA
 import org.acra.ReportField
 import org.acra.config.dialog
@@ -144,6 +149,10 @@ class StashApplication : Application() {
         }
 
         setupDB()
+
+        CoroutineScope(Dispatchers.IO + StashCoroutineExceptionHandler()).launch {
+            RecentSceneActionStore.load(this@StashApplication)
+        }
     }
 
     override fun getResources(): Resources = Restring.wrapResources(applicationContext, super.getResources())

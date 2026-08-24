@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -28,8 +29,11 @@ import com.github.damontecres.stashapp.ui.showAddGroup
 import com.github.damontecres.stashapp.ui.showShort
 import com.github.damontecres.stashapp.util.MutationEngine
 import com.github.damontecres.stashapp.util.QueryEngine
+import com.github.damontecres.stashapp.util.RecentSceneAction
+import com.github.damontecres.stashapp.util.RecentSceneActionStore
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
+import com.github.damontecres.stashapp.util.SubsQueueOverrides
 import com.github.damontecres.stashapp.util.addSceneToGroup
 import com.github.damontecres.stashapp.util.findGroupsNotInScene
 import com.github.damontecres.stashapp.util.readOnlyModeDisabled
@@ -63,8 +67,39 @@ class DefaultLongClicker(
         item as StashData
         val context = StashApplication.getApplication()
         val title = extractTitle(item) ?: ""
+
+        // The last-used action is surfaced as the first entry of the menu. For the subs queue the
+        // existing entry is *moved* to the top rather than duplicated; "add to group X" has no
+        // equivalent top-level entry, so a dedicated shortcut is inserted.
+        val recentAction = RecentSceneActionStore.current
+        val subsItem = buildSubsQueueItem(item)
+        val recentGroupItem =
+            if (item is SlimSceneData &&
+                readOnlyModeDisabled() &&
+                recentAction is RecentSceneAction.AddToGroup &&
+                item.groups.none { it.group.id == recentAction.groupId }
+            ) {
+                DialogItem(
+                    "加入群組：${recentAction.groupName}",
+                    DataType.GROUP.iconStringId,
+                ) {
+                    scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                        val server = StashServer.requireCurrentServer()
+                        addSceneToGroup(MutationEngine(server), item, recentAction.groupId)
+                        RecentSceneActionStore.record(recentAction)
+                        showShort("Added group '${recentAction.groupName}'")
+                    }
+                }
+            } else {
+                null
+            }
+
         val items =
             buildList {
+                recentGroupItem?.let { add(it) }
+                if (subsItem != null && recentAction is RecentSceneAction.SubsTag) {
+                    add(subsItem)
+                }
                 if (item is MarkerData) {
                     add(
                         DialogItem(
@@ -151,20 +186,8 @@ class DefaultLongClicker(
                         )
                     }
                 }
-                if (item is SlimSceneData &&
-                    readOnlyModeDisabled() &&
-                    item.tags.none {
-                        it.slimTagData.name.startsWith(SUBS_TAG_PREFIX, ignoreCase = true)
-                    }
-                ) {
-                    add(
-                        DialogItem(
-                            "加入字幕佇列 ($SUBS_PENDING_TAG)",
-                            Icons.Default.Add,
-                        ) {
-                            addSubsPendingTag(item)
-                        },
-                    )
+                if (subsItem != null && recentAction !is RecentSceneAction.SubsTag) {
+                    add(subsItem)
                 }
                 if (item is SlimSceneData && readOnlyModeDisabled()) {
                     add(
@@ -192,6 +215,12 @@ class DefaultLongClicker(
                                                                 MutationEngine(server),
                                                                 item,
                                                                 group.id,
+                                                            )
+                                                            RecentSceneActionStore.record(
+                                                                RecentSceneAction.AddToGroup(
+                                                                    group.id,
+                                                                    group.name,
+                                                                ),
                                                             )
                                                             showAddGroup(group)
                                                         }
@@ -299,31 +328,103 @@ private const val SUBS_PENDING_TAG = "subs:pending"
 /** 已帶任何 subs:* tag（pending/done/failed）就不再顯示選項 */
 private const val SUBS_TAG_PREFIX = "subs:"
 
-/** 幫 scene 加上 subs:pending tag（tag 不存在會自動建立）。 */
-private fun addSubsPendingTag(item: SlimSceneData) {
+/**
+ * 建立字幕佇列的選單項目：已在佇列中就顯示「移除」，還沒有任何 subs:* tag 才顯示「加入」，
+ * 已經是其他 subs:* 狀態（例如 subs:done）則不顯示。回傳 null 代表不顯示這個選項。
+ */
+private fun buildSubsQueueItem(item: Any): DialogItem? {
+    if (item !is SlimSceneData || !readOnlyModeDisabled()) return null
+    val pendingTagId =
+        SubsQueueOverrides.pendingTagId(
+            item.id,
+            item.tags
+                .firstOrNull { it.slimTagData.name.equals(SUBS_PENDING_TAG, ignoreCase = true) }
+                ?.slimTagData
+                ?.id,
+        )
+    val hasOtherSubsTag =
+        item.tags.any {
+            it.slimTagData.name.startsWith(SUBS_TAG_PREFIX, ignoreCase = true) &&
+                !it.slimTagData.name.equals(SUBS_PENDING_TAG, ignoreCase = true)
+        }
+    return when {
+        pendingTagId != null ->
+            DialogItem("移除字幕佇列 ($SUBS_PENDING_TAG)", Icons.Default.Delete) {
+                removeSubsPendingTag(item, pendingTagId)
+                RecentSceneActionStore.record(RecentSceneAction.SubsTag)
+            }
+
+        !hasOtherSubsTag ->
+            DialogItem("加入字幕佇列 ($SUBS_PENDING_TAG)", Icons.Default.Add) {
+                addSubsPendingTag(item)
+                RecentSceneActionStore.record(RecentSceneAction.SubsTag)
+            }
+
+        else -> null
+    }
+}
+
+/** 更新 scene 的 tag 列表，並在成功/失敗時顯示對應的 toast。 */
+private fun updateSubsPendingTag(
+    item: SlimSceneData,
+    failureMessage: String,
+    successMessage: String,
+    onSuccess: () -> Unit = {},
+    newTagIds: suspend (QueryEngine, MutationEngine) -> List<String>,
+) {
     val context = StashApplication.getApplication()
     CoroutineScope(Dispatchers.IO).launch(
         StashCoroutineExceptionHandler(
-            Toast.makeText(context, "加入字幕佇列失敗", Toast.LENGTH_SHORT),
+            Toast.makeText(context, failureMessage, Toast.LENGTH_SHORT),
         ),
     ) {
         val server = StashServer.requireCurrentServer()
         val queryEngine = QueryEngine(server)
         val mutationEngine = MutationEngine(server)
+        mutationEngine.setTagsOnScene(
+            item.id,
+            newTagIds(queryEngine, mutationEngine),
+        )
+        onSuccess()
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+/** 幫 scene 加上 subs:pending tag（tag 不存在會自動建立）。 */
+private fun addSubsPendingTag(item: SlimSceneData) {
+    var addedTagId: String? = null
+    updateSubsPendingTag(
+        item,
+        failureMessage = "加入字幕佇列失敗",
+        successMessage = "已加入字幕佇列：$SUBS_PENDING_TAG",
+        onSuccess = { addedTagId?.let { SubsQueueOverrides.setAdded(item.id, it) } },
+    ) { queryEngine, mutationEngine ->
         val tagId =
             queryEngine
                 .findTags(FindFilterType(q = Optional.present(SUBS_PENDING_TAG)))
                 .firstOrNull { it.name.equals(SUBS_PENDING_TAG, ignoreCase = true) }
                 ?.id
                 ?: mutationEngine.createTag(TagCreateInput(name = SUBS_PENDING_TAG))!!.id
-        mutationEngine.setTagsOnScene(
-            item.id,
-            item.tags.map { it.slimTagData.id } + tagId,
-        )
-        withContext(Dispatchers.Main) {
-            Toast
-                .makeText(context, "已加入字幕佇列：$SUBS_PENDING_TAG", Toast.LENGTH_SHORT)
-                .show()
-        }
+        addedTagId = tagId
+        // item.tags can be stale (the grid is never refreshed after a mutation), so guard
+        // against sending the same id twice
+        (item.tags.map { it.slimTagData.id } + tagId).distinct()
+    }
+}
+
+/** 移除 scene 的 subs:pending tag。 */
+private fun removeSubsPendingTag(
+    item: SlimSceneData,
+    tagId: String,
+) {
+    updateSubsPendingTag(
+        item,
+        failureMessage = "移除字幕佇列失敗",
+        successMessage = "已移出字幕佇列：$SUBS_PENDING_TAG",
+        onSuccess = { SubsQueueOverrides.setRemoved(item.id) },
+    ) { _, _ ->
+        item.tags.map { it.slimTagData.id }.filterNot { it == tagId }
     }
 }

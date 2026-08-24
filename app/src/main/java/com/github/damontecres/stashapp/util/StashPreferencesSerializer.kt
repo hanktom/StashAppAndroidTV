@@ -11,6 +11,7 @@ import com.github.damontecres.stashapp.proto.InterfacePreferences
 import com.github.damontecres.stashapp.proto.MpvPreferences
 import com.github.damontecres.stashapp.proto.PinPreferences
 import com.github.damontecres.stashapp.proto.PlaybackPreferences
+import com.github.damontecres.stashapp.proto.RecentActionPreferences
 import com.github.damontecres.stashapp.proto.ScreensaverPreferences
 import com.github.damontecres.stashapp.proto.SearchPreferences
 import com.github.damontecres.stashapp.proto.StashPreferences
@@ -208,4 +209,9 @@ inline fun StashPreferences.updatePinPreferences(block: PinPreferences.Builder.(
 inline fun StashPreferences.updateScreensaverPreferences(block: ScreensaverPreferences.Builder.() -> Unit): StashPreferences =
     update {
         screensaverPreferences = screensaverPreferences.toBuilder().apply(block).build()
+    }
+
+inline fun StashPreferences.updateRecentActionPreferences(block: RecentActionPreferences.Builder.() -> Unit): StashPreferences =
+    update {
+        recentActionPreferences = recentActionPreferences.toBuilder().apply(block).build()
     }
