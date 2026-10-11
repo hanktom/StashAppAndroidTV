@@ -5,6 +5,7 @@ import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
 import android.util.Log
+import androidx.media3.common.MimeTypes
 import androidx.preference.PreferenceManager
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.proto.PlaybackPreferences
@@ -48,6 +49,7 @@ data class CodecSupport(
                 put(MediaFormat.MIMETYPE_AUDIO_AC3, "ac3")
                 put(MediaFormat.MIMETYPE_AUDIO_EAC3, "eac3")
                 put(MediaFormat.MIMETYPE_AUDIO_MPEG, "mp3")
+                put(MimeTypes.AUDIO_MPEG_L2, "mp2")
                 put(MediaFormat.MIMETYPE_AUDIO_FLAC, "flac")
                 put(MediaFormat.MIMETYPE_AUDIO_OPUS, "opus")
                 put(MediaFormat.MIMETYPE_AUDIO_VORBIS, "vorbis")

@@ -72,6 +72,7 @@
         <item>eac3</item>
         <item>flac</item>
         <item>mp3</item>
+        <item>mp2</item>
         <item>opus</item>
         <item>truehd</item>
         <item>vorbis</item>
@@ -98,6 +99,7 @@
         <item>aac</item>
         <item>dts</item>
         <item>truehd</item>
+        <item>mp2</item>
 
         <item>pcm_alaw</item>
         <item>pcm_f32le</item>
