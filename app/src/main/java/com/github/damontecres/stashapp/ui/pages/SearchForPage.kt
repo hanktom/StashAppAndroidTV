@@ -63,6 +63,7 @@ import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -248,39 +249,44 @@ fun SearchForPage(
     if (showRecent) {
         LaunchedEffect(Unit) {
             scope.launch(StashCoroutineExceptionHandler() + Dispatchers.IO) {
+                val dao = StashApplication.getDatabase().recentSearchItemsDao()
                 val mostRecentIds =
-                    StashApplication
-                        .getDatabase()
-                        .recentSearchItemsDao()
+                    dao
                         .getMostRecent(perPage, server.url, dataType)
                         .map { it.id }
-                if (mostRecentIds.isNotEmpty()) {
-                    recent =
-                        when (dataType) {
-                            DataType.PERFORMER -> {
-                                queryEngine.findPerformers(performerIds = mostRecentIds)
-                            }
-
-                            DataType.TAG -> {
-                                queryEngine.getTags(mostRecentIds)
-                            }
-
-                            DataType.STUDIO -> {
-                                queryEngine.findStudios(studioIds = mostRecentIds)
-                            }
-
-                            DataType.GALLERY -> {
-                                queryEngine.findGalleries(galleryIds = mostRecentIds)
-                            }
-
-                            DataType.GROUP -> {
-                                queryEngine.findGroups(groupIds = mostRecentIds)
-                            }
-
-                            else -> {
-                                listOf()
-                            }
+                        .toMutableList()
+                val order = mostRecentIds.withIndex().associate { it.value to it.index }
+                // A recent item may have been deleted on the server, which fails the whole query.
+                // Never let that throw out of this coroutine: it would cancel the composition's
+                // scope and freeze the dialog. Drop the missing id and retry instead.
+                var attempts = 0
+                while (mostRecentIds.isNotEmpty() && attempts++ < 25) {
+                    try {
+                        recent =
+                            when (dataType) {
+                                DataType.PERFORMER -> queryEngine.findPerformers(performerIds = mostRecentIds)
+                                DataType.TAG -> queryEngine.getTags(mostRecentIds)
+                                DataType.STUDIO -> queryEngine.findStudios(studioIds = mostRecentIds)
+                                DataType.GALLERY -> queryEngine.findGalleries(galleryIds = mostRecentIds)
+                                DataType.GROUP -> queryEngine.findGroups(groupIds = mostRecentIds)
+                                else -> listOf()
+                            }.sortedBy { order[it.id] ?: Int.MAX_VALUE }
+                        break
+                    } catch (ex: CancellationException) {
+                        throw ex
+                    } catch (ex: Exception) {
+                        val missingId =
+                            Regex("with id (\\d+) not found")
+                                .find(ex.message.orEmpty())
+                                ?.groupValues
+                                ?.get(1)
+                        if (missingId == null || !mostRecentIds.remove(missingId)) {
+                            Log.w(TAG, "Failed to load recent $dataType items", ex)
+                            break
                         }
+                        Log.i(TAG, "Deleting missing recent item $dataType id=$missingId")
+                        dao.delete(RecentSearchItem(server.url, missingId, dataType))
+                    }
                 }
             }
         }
@@ -335,7 +341,7 @@ fun SearchForPage(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         if (title != null) {
-            item {
+            item(key = "title") {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
@@ -343,7 +349,7 @@ fun SearchForPage(
                 )
             }
         }
-        item {
+        item(key = "search") {
             SearchEditTextBox(
                 value = searchQuery,
                 onValueChange = { newQuery ->
@@ -357,7 +363,7 @@ fun SearchForPage(
         val startPadding = 8.dp
         val bottomPadding = 8.dp
 
-        item {
+        item(key = "results") {
             when (val result = results) {
                 is SearchState.NoQuery -> {
                     Text(
@@ -422,19 +428,8 @@ fun SearchForPage(
                 }
             }
         }
-        if (suggestions.isNotEmpty()) {
-            item {
-                ItemsRow(
-                    title = stringResource(R.string.suggestions),
-                    items = suggestions,
-                    uiConfig = uiConfig,
-                    itemOnClick = itemOnClickWrapper,
-                    modifier = Modifier.padding(start = startPadding, bottom = bottomPadding),
-                )
-            }
-        }
         if (recent.isNotEmpty()) {
-            item {
+            item(key = "recent") {
                 ItemsRow(
                     title =
                         stringResource(
@@ -442,6 +437,17 @@ fun SearchForPage(
                             context.getString(dataType.pluralStringId).lowercase(),
                         ),
                     items = recent,
+                    uiConfig = uiConfig,
+                    itemOnClick = itemOnClickWrapper,
+                    modifier = Modifier.padding(start = startPadding, bottom = bottomPadding),
+                )
+            }
+        }
+        if (suggestions.isNotEmpty()) {
+            item(key = "suggestions") {
+                ItemsRow(
+                    title = stringResource(R.string.suggestions),
+                    items = suggestions,
                     uiConfig = uiConfig,
                     itemOnClick = itemOnClickWrapper,
                     modifier = Modifier.padding(start = startPadding, bottom = bottomPadding),
