@@ -71,6 +71,9 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "SearchForPage"
 
+// Search results when picking an item to add; the general search setting is often lower
+private const val SEARCH_RESULTS_MIN = 100
+
 sealed interface SearchState {
     data object NoQuery : SearchState
 
@@ -215,7 +218,7 @@ fun SearchForPage(
                             dataType,
                             FindFilterType(
                                 q = Optional.present(query),
-                                per_page = Optional.present(perPage),
+                                per_page = Optional.present(maxOf(perPage, SEARCH_RESULTS_MIN)),
                             ),
                         )
                     results =
