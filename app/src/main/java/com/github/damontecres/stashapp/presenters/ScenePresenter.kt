@@ -186,7 +186,7 @@ class ScenePresenter(
                         ) { _, _, position, _ ->
                             val group = groups[position]
                             scope.launch {
-                                addSceneToGroup(MutationEngine(server), item, group.id)
+                                addSceneToGroup(MutationEngine(server), item, group.id, group.name)
                                 showAddGroup(group)
                             }
                         }.onLongClick(cardView)

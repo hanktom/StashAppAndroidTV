@@ -81,3 +81,28 @@ query FindJob($input: FindJobInput!) {
         ...StashJob
     }
 }
+
+mutation MetadataIdentify($input: IdentifyMetadataInput!){
+    metadataIdentify(input: $input)
+}
+
+query IdentifyDefaults {
+    configuration {
+        defaults {
+            identify {
+                sources {
+                    source {
+                        stash_box_endpoint
+                        scraper_id
+                    }
+                }
+            }
+        }
+        general {
+            stashBoxes {
+                endpoint
+                name
+            }
+        }
+    }
+}

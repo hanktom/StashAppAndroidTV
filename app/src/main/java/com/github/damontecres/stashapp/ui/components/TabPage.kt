@@ -272,6 +272,7 @@ fun StashGridTab(
             server = server,
             pager = newPager,
             initialPosition = -1,
+            restorePosition = viewModel.savedPosition,
             itemOnClick = itemOnClick,
             longClicker = longClicker,
             filterUiMode = FilterUiMode.CREATE_FILTER,

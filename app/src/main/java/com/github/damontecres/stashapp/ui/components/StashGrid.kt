@@ -78,9 +78,11 @@ import com.github.damontecres.stashapp.ui.util.getPlayDestinationForItem
 import com.github.damontecres.stashapp.ui.util.ifElse
 import com.github.damontecres.stashapp.util.AlphabetSearchUtils
 import com.github.damontecres.stashapp.util.ComposePager
+import com.github.damontecres.stashapp.util.GridPositionStore
 import com.github.damontecres.stashapp.util.StashCoroutineExceptionHandler
 import com.github.damontecres.stashapp.util.StashServer
 import com.github.damontecres.stashapp.util.defaultCardWidth
+import com.github.damontecres.stashapp.util.positionKey
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -114,6 +116,7 @@ fun StashGridControls(
     requestFocus: Boolean,
     modifier: Modifier = Modifier,
     initialPosition: Int = 0,
+    restorePosition: Int = -1,
     itemOnLongClick: ((Any) -> Unit)? = null,
     positionCallback: ((columns: Int, position: Int) -> Unit)? = null,
     subToggleLabel: String? = null,
@@ -298,6 +301,7 @@ fun StashGridControls(
             requestFocus = shouldRequestFocus,
             letterPosition = letterPosition,
             initialPosition = initialPosition,
+            restorePosition = restorePosition,
             positionCallback = { columns, position ->
                 showTopRowRaw = position < columns
                 positionCallback?.invoke(columns, position)
@@ -341,6 +345,7 @@ fun StashGrid(
     gridFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     initialPosition: Int = 0,
+    restorePosition: Int = -1,
     positionCallback: ((columns: Int, position: Int) -> Unit)? = null,
     cardContext: ((index: Int, item: StashData) -> CardContext)? = null,
 ) {
@@ -357,10 +362,23 @@ fun StashGrid(
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val filterArgs = pager.filter
+    val positionKey = remember(filterArgs) { filterArgs.positionKey() }
+    val server = LocalGlobalContext.current.server
     val firstFocus = remember { FocusRequester() }
     val zeroFocus = remember { FocusRequester() }
+    // A previously remembered position for this filter (see GridPositionStore); -1 means none.
+    // It is consumed the first time focus enters the grid.
+    var pendingRestore by rememberSaveable { mutableIntStateOf(if (restorePosition in 1..<pager.size) restorePosition else -1) }
+    // Where the grid should start when the caller requests focus: an explicit initialPosition wins,
+    // otherwise the remembered position, otherwise 0
+    val resolvedStart =
+        remember {
+            if (initialPosition == 0 && pendingRestore > 0) pendingRestore else startPosition
+        }
     var previouslyFocusedIndex by rememberSaveable { mutableIntStateOf(0) }
-    var focusedIndex by rememberSaveable { mutableIntStateOf(initialPosition) }
+    var focusedIndex by rememberSaveable {
+        mutableIntStateOf(if (requestFocus && initialPosition >= 0) resolvedStart else initialPosition)
+    }
     var focusedIndexOnExit by rememberSaveable { mutableIntStateOf(-1) }
 
     // Tracks whether the very first requestFocus has run, if the caller isn't requesting focus,
@@ -379,17 +397,20 @@ fun StashGrid(
         if (!hasRequestFocusRun) {
             // On very first composition, if parent wants to focus on the grid, scroll to the item
             if (requestFocus && initialPosition >= 0) {
-                if (DEBUG) {
-                    Log.d(
-                        TAG,
-                        "focus on startPosition=$startPosition, from initialPosition=$initialPosition",
-                    )
-                }
-                focusedIndex = startPosition
-                gridState.scrollToItem(startPosition, 0)
+                focusedIndex = resolvedStart
+                gridState.scrollToItem(resolvedStart, 0)
                 firstFocus.tryRequestFocus()
+                pendingRestore = -1
             }
         } else {
+            if (pendingRestore > 0 && focusedIndex < 0) {
+                // The caller isn't requesting focus (e.g. a tab grid): scroll to the remembered
+                // position, but don't request focus since the tab row / top row owns it right now.
+                // Focus lands on this item when the user enters the grid (see onEnter below).
+                if (DEBUG) Log.d(TAG, "restoring position $pendingRestore")
+                focusedIndex = pendingRestore
+                gridState.scrollToItem(pendingRestore, 0)
+            }
             val index = savedFocusedIndex
             if (DEBUG) Log.d(TAG, "savedFocusedIndex=$index")
             if (index in 0..<pager.size) {
@@ -423,6 +444,7 @@ fun StashGrid(
                 .collect {
                     positionCallback?.invoke(columns, it)
                     focusOn.invoke(it)
+                    positionKey?.let { key -> GridPositionStore.save(server.url, key, it) }
                 }
         }
     }
@@ -485,8 +507,6 @@ fun StashGrid(
             zeroFocus.tryRequestFocus()
         }
     }
-    val server = LocalGlobalContext.current.server
-
     var longPressing by remember { mutableStateOf(false) }
     Row(
 //        horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -574,7 +594,14 @@ fun StashGrid(
                             }
                             onEnter = {
                                 focusedIndexOnExit = -1
-                                if (focusedIndex < 0 && gridState.firstVisibleItemIndex <= startPosition) {
+                                if (pendingRestore in 1..<pager.size) {
+                                    val restoreIndex = pendingRestore
+                                    pendingRestore = -1
+                                    if (focusedIndex < 0) {
+                                        focusedIndex = restoreIndex
+                                    }
+                                    firstFocus.tryRequestFocus()
+                                } else if (focusedIndex < 0 && gridState.firstVisibleItemIndex <= startPosition) {
                                     focusedIndex = startPosition
                                     firstFocus.tryRequestFocus()
                                 }
@@ -599,11 +626,11 @@ fun StashGrid(
                             if (DEBUG) {
                                 Log.d(
                                     TAG,
-                                    "non-null focus on startPosition=$startPosition, from initialPosition=$initialPosition",
+                                    "non-null focus on resolvedStart=$resolvedStart, from initialPosition=$initialPosition",
                                 )
                             }
-                            // focus on startPosition
-                            gridState.scrollToItem(startPosition, 0)
+                            // focus on resolvedStart
+                            gridState.scrollToItem(resolvedStart, 0)
                             firstFocus.tryRequestFocus()
                             hasRequestFocusRun = true
                         }
@@ -623,6 +650,7 @@ fun StashGrid(
                                         // Focused, so set that up
                                         focusOn(index)
                                         positionCallback?.invoke(columns, index)
+                                        positionKey?.let { GridPositionStore.save(server.url, it, index) }
                                     } else if (focusedIndex == index) {
                                         savedFocusedIndex = index
                                         // Was focused on this, so mark unfocused

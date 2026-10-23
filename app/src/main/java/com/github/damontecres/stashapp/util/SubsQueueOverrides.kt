@@ -29,6 +29,11 @@ object SubsQueueOverrides {
         overrides[sceneId] = REMOVED
     }
 
+    /** Forget any session override for [sceneId] (e.g. after re-fetching fresh data). */
+    fun clear(sceneId: String) {
+        overrides.remove(sceneId)
+    }
+
     /**
      * The scene's subs:pending tag id, preferring anything changed in this session over [fromTags].
      * Null means the scene is not in the queue.

@@ -103,6 +103,7 @@ fun FilterPage(
                 itemOnClick = itemOnClick,
                 longClicker = longClicker,
                 initialPosition = initialPosition,
+                restorePosition = viewModel.savedPosition,
                 updateFilter = {
                     viewModel.setFilter(server, it, uiConfig.cardSettings.columns)
                 },

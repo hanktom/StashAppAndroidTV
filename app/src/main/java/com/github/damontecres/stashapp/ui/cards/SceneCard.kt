@@ -1,17 +1,27 @@
 package com.github.damontecres.stashapp.ui.cards
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -30,11 +40,31 @@ import com.github.damontecres.stashapp.presenters.ScenePresenter
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.components.LongClicker
 import com.github.damontecres.stashapp.ui.enableMarquee
+import com.github.damontecres.stashapp.util.DeletedScenes
+import com.github.damontecres.stashapp.util.SameCodeCounts
 import com.github.damontecres.stashapp.util.isNotNullOrBlank
 import com.github.damontecres.stashapp.util.resolutionName
 import com.github.damontecres.stashapp.util.titleOrFilename
 import com.github.damontecres.stashapp.views.durationToString
 import java.util.EnumMap
+
+@Composable
+private fun CardBadge(
+    text: String,
+    backgroundColor: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        color = textColor,
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+        modifier =
+            modifier
+                .background(backgroundColor, RoundedCornerShape(4.dp))
+                .padding(horizontal = 5.dp, vertical = 1.dp),
+    )
+}
 
 @Composable
 fun SceneCard(
@@ -108,14 +138,18 @@ fun SceneCard(
                                 .align(Alignment.BottomEnd)
                                 .padding(4.dp),
                         text = duration,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(shadow = OVERLAY_TEXT_SHADOW),
                     )
                     Text(
                         modifier =
                             Modifier
                                 .align(Alignment.BottomStart)
                                 .padding(4.dp),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        style =
+                            MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                shadow = OVERLAY_TEXT_SHADOW,
+                            ),
                         text = videoFile.resolutionName().toString(),
                     )
                     if (item.resume_time != null && uiConfig.showCardProgress) {
@@ -132,6 +166,78 @@ fun SceneCard(
                         )
                     }
                 }
+                val hasRmTag =
+                    item?.tags?.any { it.slimTagData.name.equals("0 RM", ignoreCase = true) } == true
+                val hasSubsDone =
+                    item?.tags?.any { it.slimTagData.name.equals("subs:done", ignoreCase = true) } == true
+                val hasSubsSource =
+                    item?.tags?.any { it.slimTagData.name.equals("subs:source", ignoreCase = true) } == true
+                val isDeleted = item != null && DeletedScenes.isDeleted(item.id)
+                if (isDeleted || hasRmTag || hasSubsDone || hasSubsSource) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (isDeleted) {
+                            CardBadge(
+                                text = "已刪除",
+                                backgroundColor = Color(0xFF424242),
+                                textColor = Color.White,
+                            )
+                        }
+                        if (hasRmTag) {
+                            CardBadge(
+                                text = "RM",
+                                backgroundColor = Color(0xFFD32F2F),
+                                textColor = Color.White,
+                            )
+                        }
+                        if (hasSubsDone) {
+                            CardBadge(
+                                text = "字幕",
+                                backgroundColor = Color(0xFFFFC107),
+                                textColor = Color.Black,
+                            )
+                        }
+                        if (hasSubsSource) {
+                            CardBadge(
+                                text = "自帶字幕",
+                                backgroundColor = Color(0xFF2E7D32),
+                                textColor = Color.White,
+                            )
+                        }
+                    }
+                }
+                // 同番號影片數量徽章（≥2 才顯示），位於縮圖右上角
+                val code = item?.code
+                if (code.isNotNullOrBlank()) {
+                    LaunchedEffect(code) { SameCodeCounts.request(code) }
+                }
+                val sameCodeCount = if (code.isNotNullOrBlank()) SameCodeCounts.get(code) ?: 0 else 0
+                val showCountBadge = sameCodeCount >= 2
+                if (showCountBadge) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(2.dp)
+                                .size(22.dp)
+                                .background(Color(0xFFE91E63), CircleShape)
+                                .border(1.dp, Color.White, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = sameCodeCount.toString(),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                    }
+                }
+                // 徽章顯示時，廠商 logo/文字往左移避免重疊
+                val studioEndPadding = if (showCountBadge) 28.dp else 4.dp
                 if (item?.studio != null) {
                     val imageUrl = item.studio.image_path
                     if (!uiConfig.showStudioAsText &&
@@ -144,7 +250,7 @@ fun SceneCard(
                             modifier =
                                 Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(4.dp)
+                                    .padding(top = 4.dp, bottom = 4.dp, start = 4.dp, end = studioEndPadding)
                                     .fillMaxWidth(.4f),
                             model = imageUrl,
                             contentDescription = null,
@@ -155,7 +261,7 @@ fun SceneCard(
                             modifier =
                                 Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(4.dp),
+                                    .padding(top = 4.dp, bottom = 4.dp, start = 4.dp, end = studioEndPadding),
                             style = MaterialTheme.typography.bodyMedium,
                             text = item.studio.name,
                         )
@@ -165,3 +271,13 @@ fun SceneCard(
         },
     )
 }
+
+/**
+ * 卡片縮圖上的白色文字（時長、解析度）在淺色背景會看不清楚，加一層不顯眼的深色陰影提升對比。
+ */
+private val OVERLAY_TEXT_SHADOW =
+    Shadow(
+        color = Color.Black.copy(alpha = 0.85f),
+        offset = Offset(1f, 1f),
+        blurRadius = 4f,
+    )

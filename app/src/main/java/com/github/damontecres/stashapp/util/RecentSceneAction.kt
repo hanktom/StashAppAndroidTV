@@ -20,10 +20,27 @@ sealed interface RecentSceneAction {
     ) : RecentSceneAction
 
     data object SubsTag : RecentSceneAction
+
+    data object SubsSourceTag : RecentSceneAction
+
+    data class AddTag(
+        val tagName: String,
+    ) : RecentSceneAction
+
+    data object GenerateAndIdentify : RecentSceneAction
+
+    data object RemoveFromRmGroups : RecentSceneAction
 }
 
 private const val KIND_ADD_TO_GROUP = "ADD_TO_GROUP"
 private const val KIND_SUBS_TAG = "SUBS_TAG"
+private const val KIND_SUBS_SOURCE_TAG = "SUBS_SOURCE_TAG"
+private const val KIND_ADD_TAG = "ADD_TAG"
+private const val KIND_GENERATE_IDENTIFY = "GENERATE_IDENTIFY"
+private const val KIND_REMOVE_FROM_RM_GROUPS = "REMOVE_FROM_RM_GROUPS"
+
+// Legacy kind from when the "0 RM" action was hardcoded; decoded as AddTag("0 RM")
+private const val KIND_RM_TAG = "RM_TAG"
 
 /**
  * Persists (via [Context.preferences]) and caches the most recently used scene long-click action.
@@ -60,6 +77,30 @@ object RecentSceneActionStore {
                             sceneActionTargetId = ""
                             sceneActionTargetName = ""
                         }
+
+                        is RecentSceneAction.SubsSourceTag -> {
+                            sceneActionKind = KIND_SUBS_SOURCE_TAG
+                            sceneActionTargetId = ""
+                            sceneActionTargetName = ""
+                        }
+
+                        is RecentSceneAction.AddTag -> {
+                            sceneActionKind = KIND_ADD_TAG
+                            sceneActionTargetId = ""
+                            sceneActionTargetName = action.tagName
+                        }
+
+                        is RecentSceneAction.GenerateAndIdentify -> {
+                            sceneActionKind = KIND_GENERATE_IDENTIFY
+                            sceneActionTargetId = ""
+                            sceneActionTargetName = ""
+                        }
+
+                        is RecentSceneAction.RemoveFromRmGroups -> {
+                            sceneActionKind = KIND_REMOVE_FROM_RM_GROUPS
+                            sceneActionTargetId = ""
+                            sceneActionTargetName = ""
+                        }
                     }
                 }
             }
@@ -92,6 +133,21 @@ private fun RecentActionPreferences.toRecentSceneActionOrNull(): RecentSceneActi
             }
 
         KIND_SUBS_TAG -> RecentSceneAction.SubsTag
+
+        KIND_SUBS_SOURCE_TAG -> RecentSceneAction.SubsSourceTag
+
+        KIND_GENERATE_IDENTIFY -> RecentSceneAction.GenerateAndIdentify
+
+        KIND_REMOVE_FROM_RM_GROUPS -> RecentSceneAction.RemoveFromRmGroups
+
+        KIND_ADD_TAG ->
+            if (sceneActionTargetName.isNotBlank()) {
+                RecentSceneAction.AddTag(sceneActionTargetName)
+            } else {
+                null
+            }
+
+        KIND_RM_TAG -> RecentSceneAction.AddTag("0 RM")
 
         else -> null
     }

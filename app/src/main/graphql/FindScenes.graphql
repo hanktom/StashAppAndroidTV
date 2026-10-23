@@ -32,6 +32,15 @@ query CountScenes($filter: FindFilterType, $scene_filter: SceneFilterType, $ids:
     }
 }
 
+query FindSceneCodes($filter: FindFilterType, $scene_filter: SceneFilterType) {
+    findScenes(filter: $filter, scene_filter: $scene_filter) {
+        scenes {
+            id
+            code
+        }
+    }
+}
+
 fragment SlimSceneData on Scene {
     id
     title

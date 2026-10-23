@@ -28,3 +28,14 @@ val MIGRATION_4_TO_5 =
             db.execSQL("ALTER TABLE playback_effects_temp RENAME TO playback_effects")
         }
     }
+
+val MIGRATION_5_TO_6 =
+    object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `grid_positions` " +
+                    "(`serverUrl` TEXT NOT NULL, `filterKey` TEXT NOT NULL, `position` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`serverUrl`, `filterKey`))",
+            )
+        }
+    }

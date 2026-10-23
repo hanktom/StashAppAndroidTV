@@ -17,6 +17,7 @@ import com.github.damontecres.stashapp.api.ImageIncrementOMutation
 import com.github.damontecres.stashapp.api.ImageResetOMutation
 import com.github.damontecres.stashapp.api.InstallPackagesMutation
 import com.github.damontecres.stashapp.api.MetadataGenerateMutation
+import com.github.damontecres.stashapp.api.MetadataIdentifyMutation
 import com.github.damontecres.stashapp.api.MetadataScanMutation
 import com.github.damontecres.stashapp.api.SaveFilterMutation
 import com.github.damontecres.stashapp.api.SceneAddOMutation
@@ -43,6 +44,8 @@ import com.github.damontecres.stashapp.api.type.GalleryUpdateInput
 import com.github.damontecres.stashapp.api.type.GenerateMetadataInput
 import com.github.damontecres.stashapp.api.type.GroupCreateInput
 import com.github.damontecres.stashapp.api.type.GroupUpdateInput
+import com.github.damontecres.stashapp.api.type.IdentifyMetadataInput
+import com.github.damontecres.stashapp.api.type.IdentifySourceInput
 import com.github.damontecres.stashapp.api.type.ImageUpdateInput
 import com.github.damontecres.stashapp.api.type.PackageSpecInput
 import com.github.damontecres.stashapp.api.type.PackageType
@@ -55,6 +58,7 @@ import com.github.damontecres.stashapp.api.type.SceneGroupInput
 import com.github.damontecres.stashapp.api.type.SceneMarkerCreateInput
 import com.github.damontecres.stashapp.api.type.SceneMarkerUpdateInput
 import com.github.damontecres.stashapp.api.type.SceneUpdateInput
+import com.github.damontecres.stashapp.api.type.ScraperSourceInput
 import com.github.damontecres.stashapp.api.type.StudioCreateInput
 import com.github.damontecres.stashapp.api.type.StudioUpdateInput
 import com.github.damontecres.stashapp.api.type.TagCreateInput
@@ -168,7 +172,7 @@ class MutationEngine(
         return executeMutation(mutation).data!!.metadataScan
     }
 
-    suspend fun triggerGenerate(): String {
+    suspend fun triggerGenerate(sceneIds: List<String>? = null): String {
         val mutation =
             MetadataGenerateMutation(
                 GenerateMetadataInput(
@@ -184,9 +188,28 @@ class MutationEngine(
                     sprites = getServerBoolean(ServerPreferences.PREF_GEN_SPRITES, true),
                     transcodes = getServerBoolean(ServerPreferences.PREF_GEN_TRANSCODES),
                     imageThumbnails = getServerBoolean(ServerPreferences.PREF_GEN_IMAGE_THUMBNAILS),
+                    sceneIDs = Optional.presentIfNotNull(sceneIds),
                 ),
             )
         return executeMutation(mutation).data!!.metadataGenerate
+    }
+
+    /**
+     * Triggers the server's "Identify" task (batch scrape) for the given scenes using the given
+     * sources (e.g. configured stash-boxes or scrapers).
+     */
+    suspend fun triggerIdentify(
+        sceneIds: List<String>,
+        sources: List<ScraperSourceInput>,
+    ): String {
+        val mutation =
+            MetadataIdentifyMutation(
+                IdentifyMetadataInput(
+                    sources = sources.map { IdentifySourceInput(source = it) },
+                    sceneIDs = Optional.present(sceneIds),
+                ),
+            )
+        return executeMutation(mutation).data!!.metadataIdentify
     }
 
     suspend fun setTagsOnScene(

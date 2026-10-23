@@ -18,6 +18,7 @@ import com.github.damontecres.stashapp.api.FindMarkersQuery
 import com.github.damontecres.stashapp.api.FindPerformersQuery
 import com.github.damontecres.stashapp.api.FindSavedFilterQuery
 import com.github.damontecres.stashapp.api.FindSavedFiltersQuery
+import com.github.damontecres.stashapp.api.FindSceneCodesQuery
 import com.github.damontecres.stashapp.api.FindScenesQuery
 import com.github.damontecres.stashapp.api.FindSlimImagesQuery
 import com.github.damontecres.stashapp.api.FindStudiosQuery
@@ -30,6 +31,7 @@ import com.github.damontecres.stashapp.api.GetSceneQuery
 import com.github.damontecres.stashapp.api.GetStudioQuery
 import com.github.damontecres.stashapp.api.GetTagQuery
 import com.github.damontecres.stashapp.api.GetVideoSceneQuery
+import com.github.damontecres.stashapp.api.IdentifyDefaultsQuery
 import com.github.damontecres.stashapp.api.fragment.ExtraImageData
 import com.github.damontecres.stashapp.api.fragment.FullMarkerData
 import com.github.damontecres.stashapp.api.fragment.FullSceneData
@@ -57,6 +59,7 @@ import com.github.damontecres.stashapp.api.type.MultiCriterionInput
 import com.github.damontecres.stashapp.api.type.PerformerFilterType
 import com.github.damontecres.stashapp.api.type.SceneFilterType
 import com.github.damontecres.stashapp.api.type.SceneMarkerFilterType
+import com.github.damontecres.stashapp.api.type.ScraperSourceInput
 import com.github.damontecres.stashapp.api.type.StudioFilterType
 import com.github.damontecres.stashapp.api.type.TagFilterType
 import com.github.damontecres.stashapp.data.DataType
@@ -120,6 +123,26 @@ class QueryEngine(
                 it.slimSceneData
             }
         return scenes.orEmpty()
+    }
+
+    /** 只取 id 與番號的輕量查詢，用於計算同番號影片數量 */
+    suspend fun findSceneCodes(
+        findFilter: FindFilterType?,
+        sceneFilter: SceneFilterType?,
+    ): List<Pair<String, String?>> {
+        val query =
+            client.query(
+                FindSceneCodesQuery(
+                    filter = findFilter,
+                    scene_filter = sceneFilter,
+                ),
+            )
+        return executeQuery(query)
+            .data
+            ?.findScenes
+            ?.scenes
+            .orEmpty()
+            .map { it.id to it.code }
     }
 
     suspend fun getScene(sceneId: String): FullSceneData? {
@@ -458,6 +481,37 @@ class QueryEngine(
     suspend fun getServerConfiguration(): ConfigurationQuery.Data {
         val query = ConfigurationQuery()
         return executeQuery(query).data!!
+    }
+
+    /**
+     * Determines the sources to use for the server's "Identify" task: the server's configured
+     * default identify sources if any are set, otherwise one source per configured stash-box.
+     */
+    suspend fun getIdentifySources(): List<ScraperSourceInput> {
+        val query = IdentifyDefaultsQuery()
+        val data = executeQuery(query).data ?: return emptyList()
+        val defaultSources =
+            data.configuration.defaults.identify
+                ?.sources
+                .orEmpty()
+                .mapNotNull {
+                    val endpoint = it.source.stash_box_endpoint
+                    val scraperId = it.source.scraper_id
+                    if (endpoint == null && scraperId == null) {
+                        null
+                    } else {
+                        ScraperSourceInput(
+                            stash_box_endpoint = Optional.presentIfNotNull(endpoint),
+                            scraper_id = Optional.presentIfNotNull(scraperId),
+                        )
+                    }
+                }
+        if (defaultSources.isNotEmpty()) {
+            return defaultSources
+        }
+        return data.configuration.general.stashBoxes.map {
+            ScraperSourceInput(stash_box_endpoint = Optional.present(it.endpoint))
+        }
     }
 
     suspend fun getJob(jobId: String): StashJob? {
