@@ -28,7 +28,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.LocalTextStyle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -103,7 +105,26 @@ fun SceneCard(
         title = AnnotatedString(item?.titleOrFilename ?: ""),
         subtitle = {
             Column {
-                Text(item?.date ?: "")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(item?.date ?: "", maxLines = 1)
+                    val code = item?.code
+                    if (code.isNotNullOrBlank()) {
+                        Text(
+                            text = code,
+                            style =
+                                LocalTextStyle.current.let {
+                                    it.copy(fontSize = it.fontSize * 1.15f, fontWeight = FontWeight.SemiBold)
+                                },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
                 cardContext?.let {
                     val index =
                         item?.groups?.firstOrNull { cardContext.sceneInGroupId == it.group.id }?.scene_index
