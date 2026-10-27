@@ -19,6 +19,7 @@ import com.github.damontecres.stashapp.navigation.NavigationManagerCompose
 import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.FilterViewModel
+import com.github.damontecres.stashapp.ui.SortMemory
 import com.github.damontecres.stashapp.ui.components.CircularProgress
 import com.github.damontecres.stashapp.ui.components.CreateFilter
 import com.github.damontecres.stashapp.ui.components.FilterUiMode
@@ -43,7 +44,7 @@ fun FilterPage(
     if (viewModel.currentFilter == null) {
         // If the view model is populated, don't do it again
         LaunchedEffect(server, initialFilter) {
-            viewModel.setFilter(server, initialFilter, uiConfig.cardSettings.columns)
+            viewModel.setFilter(server, initialFilter, uiConfig.cardSettings.columns, SortMemory.RESTORE)
         }
     }
     val pager by viewModel.pager.observeAsState()
@@ -105,7 +106,7 @@ fun FilterPage(
                 initialPosition = initialPosition,
                 restorePosition = viewModel.savedPosition,
                 updateFilter = {
-                    viewModel.setFilter(server, it, uiConfig.cardSettings.columns)
+                    viewModel.setFilter(server, it, uiConfig.cardSettings.columns, SortMemory.SAVE)
                 },
                 letterPosition = viewModel::findLetterPosition,
                 requestFocus = true,

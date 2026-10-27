@@ -39,3 +39,14 @@ val MIGRATION_5_TO_6 =
             )
         }
     }
+
+val MIGRATION_6_TO_7 =
+    object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `grid_sorts` " +
+                    "(`serverUrl` TEXT NOT NULL, `filterKey` TEXT NOT NULL, `sort` TEXT NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`serverUrl`, `filterKey`))",
+            )
+        }
+    }

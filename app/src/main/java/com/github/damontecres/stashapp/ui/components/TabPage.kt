@@ -45,6 +45,7 @@ import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.ui.ComposeUiConfig
 import com.github.damontecres.stashapp.ui.FilterViewModel
 import com.github.damontecres.stashapp.ui.LocalGlobalContext
+import com.github.damontecres.stashapp.ui.SortMemory
 import com.github.damontecres.stashapp.ui.cards.CardContext
 import com.github.damontecres.stashapp.ui.compat.isTvDevice
 import com.github.damontecres.stashapp.ui.filterArgsSaver
@@ -264,7 +265,7 @@ fun StashGridTab(
 ) {
     val navigationManager = LocalGlobalContext.current.navigationManager
     LaunchedEffect(server, initialFilter) {
-        viewModel.setFilter(server, initialFilter, composeUiConfig.cardSettings.columns)
+        viewModel.setFilter(server, initialFilter, composeUiConfig.cardSettings.columns, SortMemory.RESTORE)
     }
     val pager by viewModel.pager.observeAsState()
     pager?.let { newPager ->
@@ -287,7 +288,10 @@ fun StashGridTab(
             modifier = modifier,
             positionCallback = positionCallback,
             uiConfig = composeUiConfig,
-            updateFilter = { onFilterChange?.invoke(it) },
+            updateFilter = {
+                viewModel.setFilter(server, it, composeUiConfig.cardSettings.columns, SortMemory.SAVE)
+                onFilterChange?.invoke(it)
+            },
             letterPosition = viewModel::findLetterPosition,
             subToggleLabel = subToggleLabel,
             onSubToggleCheck = onSubToggleCheck,
