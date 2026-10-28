@@ -19,11 +19,14 @@ class ComposePager<T : StashData>(
     private val source: StashPagingSource<*, *, T, *>,
     private val scope: CoroutineScope,
     private val pageSize: Int = 25,
-    cacheSize: Long = 8,
+    cacheSize: Long = 32,
 ) : AbstractList<T?>() {
     private var items by mutableStateOf(ItemList<T>(0, pageSize, mapOf()))
     private var totalCount by mutableIntStateOf(-1)
     private val mutex = Mutex()
+
+    /** Ids that already triggered a re-fetch in [dedupe] */
+    private val resyncedIds = HashSet<String>()
     private val cachedPages =
         CacheBuilder
             .newBuilder()
@@ -68,12 +71,45 @@ class ComposePager<T : StashData>(
                 val pageNumber = position / pageSize + 1
                 if (cachedPages.getIfPresent(pageNumber) == null) {
                     if (DEBUG) Log.v(TAG, "fetchPage: $pageNumber")
-                    val data = source.fetchPage(pageNumber, pageSize)
+                    val data = dedupe(pageNumber, source.fetchPage(pageNumber, pageSize))
                     cachedPages.put(pageNumber, data)
                     items = ItemList(totalCount, pageSize, cachedPages.asMap())
                 }
             }
         }
+
+    /**
+     * Pages are fetched separately with offset pagination, so if the server's results shift between
+     * fetches (e.g. a scene was edited and its sort value changed, or sort ties are ordered
+     * differently), the same item can appear in two pages and be shown twice in the grid.
+     *
+     * The first time an item is seen twice, the other cached pages are dropped so they are re-fetched
+     * consistently with the server's current order. If it still shows up twice afterwards (the
+     * order is unstable), it is removed from the newly fetched page.
+     */
+    private fun dedupe(
+        pageNumber: Int,
+        data: List<T>,
+    ): List<T> {
+        val otherIds =
+            cachedPages
+                .asMap()
+                .filterKeys { it != pageNumber }
+                .values
+                .flatMapTo(HashSet()) { page -> page.map { it.id } }
+        val duplicates = data.filter { it.id in otherIds }.mapTo(HashSet()) { it.id }
+        if (duplicates.isEmpty()) {
+            return data
+        }
+        return if (resyncedIds.addAll(duplicates)) {
+            Log.w(TAG, "Page $pageNumber overlaps other pages (${duplicates.size} items), re-fetching them")
+            cachedPages.invalidateAll()
+            data
+        } else {
+            Log.w(TAG, "Page $pageNumber still overlaps other pages, dropping ${duplicates.size} items")
+            data.filter { it.id !in duplicates }
+        }
+    }
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
