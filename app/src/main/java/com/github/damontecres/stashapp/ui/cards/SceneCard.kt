@@ -157,7 +157,9 @@ fun SceneCard(
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(4.dp),
+                                .padding(4.dp)
+                                .background(OVERLAY_LABEL_BACKGROUND, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp),
                         text = duration,
                         style = MaterialTheme.typography.bodyMedium.copy(shadow = OVERLAY_TEXT_SHADOW),
                     )
@@ -165,7 +167,9 @@ fun SceneCard(
                         modifier =
                             Modifier
                                 .align(Alignment.BottomStart)
-                                .padding(4.dp),
+                                .padding(4.dp)
+                                .background(OVERLAY_LABEL_BACKGROUND, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp),
                         style =
                             MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.Bold,
@@ -292,6 +296,11 @@ fun SceneCard(
         },
     )
 }
+
+/**
+ * 卡片縮圖上的時長、解析度標籤底色：半透明黑底，讓白字在任何縮圖上都看得清楚。
+ */
+private val OVERLAY_LABEL_BACKGROUND = Color.Black.copy(alpha = 0.65f)
 
 /**
  * 卡片縮圖上的白色文字（時長、解析度）在淺色背景會看不清楚，加一層不顯眼的深色陰影提升對比。
