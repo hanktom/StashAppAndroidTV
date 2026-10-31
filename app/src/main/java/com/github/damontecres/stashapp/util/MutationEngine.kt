@@ -19,6 +19,7 @@ import com.github.damontecres.stashapp.api.InstallPackagesMutation
 import com.github.damontecres.stashapp.api.MetadataGenerateMutation
 import com.github.damontecres.stashapp.api.MetadataIdentifyMutation
 import com.github.damontecres.stashapp.api.MetadataScanMutation
+import com.github.damontecres.stashapp.api.RunPluginTaskMutation
 import com.github.damontecres.stashapp.api.SaveFilterMutation
 import com.github.damontecres.stashapp.api.SceneAddOMutation
 import com.github.damontecres.stashapp.api.SceneAddPlayCountMutation
@@ -199,6 +200,22 @@ class MutationEngine(
                 ),
             )
         return executeMutation(mutation).data!!.metadataGenerate
+    }
+
+    /**
+     * Triggers the server-side `remux_ts` plugin task which remuxes a scene's MPEG-TS file to mp4,
+     * re-attaches it to the scene, deletes the .ts and regenerates previews.
+     *
+     * @return the plugin job id, or null if the server did not return one (e.g. plugin missing)
+     */
+    suspend fun triggerRemuxTs(sceneId: String): String? {
+        val mutation =
+            RunPluginTaskMutation(
+                plugin_id = REMUX_TS_PLUGIN_ID,
+                task_name = REMUX_TS_TASK_NAME,
+                args_map = mapOf("scene_id" to sceneId),
+            )
+        return executeMutation(mutation).data?.runPluginTask
     }
 
     /**
@@ -598,6 +615,9 @@ class MutationEngine(
 
     companion object {
         const val TAG = "MutationEngine"
+
+        const val REMUX_TS_PLUGIN_ID = "remux_ts"
+        const val REMUX_TS_TASK_NAME = "Remux scene to mp4"
 
         private val MUTATION_ID = AtomicInteger(0)
     }

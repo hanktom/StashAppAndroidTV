@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.ui.components
 
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,7 @@ import com.github.damontecres.stashapp.util.removeSceneFromGroups
 import com.github.damontecres.stashapp.util.resume_position
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -677,23 +679,57 @@ private fun triggerGenerateAndIdentify(item: SlimSceneData) {
         val server = StashServer.requireCurrentServer()
         val mutationEngine = MutationEngine(server)
         val queryEngine = QueryEngine(server)
-        mutationEngine.triggerGenerate(listOf(item.id), overwrite = true)
+        val isTs =
+            item.files
+                .firstOrNull()
+                ?.videoFile
+                ?.path
+                ?.endsWith(".ts", ignoreCase = true) == true
+        // .ts 檔伺服器無法產生可用的預覽：交給 remux_ts 外掛轉成 mp4（外掛轉完會自己重新產生預覽）。
+        // 外掛不存在或呼叫失敗時退回一般的產生預覽流程，且不中斷後面的 Identify。
+        var remuxed = false
+        if (isTs) {
+            remuxed =
+                try {
+                    mutationEngine.triggerRemuxTs(item.id).isNotNullOrBlank()
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Log.w("LongClicker", "remux_ts plugin task failed", ex)
+                    false
+                }
+            if (!remuxed) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "找不到 remux 外掛，改為一般產生預覽", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        if (!remuxed) {
+            mutationEngine.triggerGenerate(listOf(item.id), overwrite = true)
+        }
         val (sources, options) = queryEngine.getIdentifyDefaults()
         if (sources.isEmpty()) {
             withContext(Dispatchers.Main) {
-                Toast
-                    .makeText(
-                        context,
-                        "已送出產生預覽工作；Scrape 略過：伺服器未設定 identify 來源/stash-box",
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                val message =
+                    if (remuxed) {
+                        "已送出 .ts 轉檔工作；Scrape 略過：伺服器未設定 identify 來源/stash-box"
+                    } else {
+                        "已送出產生預覽工作；Scrape 略過：伺服器未設定 identify 來源/stash-box"
+                    }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
             return@launch
         }
         mutationEngine.triggerIdentify(listOf(item.id), sources, options)
         RecentSceneActionStore.record(RecentSceneAction.GenerateAndIdentify)
         withContext(Dispatchers.Main) {
-            Toast.makeText(context, "已送出產生預覽與 Scrape 工作", Toast.LENGTH_SHORT).show()
+            val message =
+                if (remuxed) {
+                    "已送出 .ts 轉檔 + Scrape；轉檔完成後會自動重新產生預覽"
+                } else {
+                    "已送出產生預覽與 Scrape 工作"
+                }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 }
