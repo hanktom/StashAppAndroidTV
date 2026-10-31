@@ -677,8 +677,8 @@ private fun triggerGenerateAndIdentify(item: SlimSceneData) {
         val server = StashServer.requireCurrentServer()
         val mutationEngine = MutationEngine(server)
         val queryEngine = QueryEngine(server)
-        mutationEngine.triggerGenerate(listOf(item.id))
-        val sources = queryEngine.getIdentifySources()
+        mutationEngine.triggerGenerate(listOf(item.id), overwrite = true)
+        val (sources, options) = queryEngine.getIdentifyDefaults()
         if (sources.isEmpty()) {
             withContext(Dispatchers.Main) {
                 Toast
@@ -690,7 +690,7 @@ private fun triggerGenerateAndIdentify(item: SlimSceneData) {
             }
             return@launch
         }
-        mutationEngine.triggerIdentify(listOf(item.id), sources)
+        mutationEngine.triggerIdentify(listOf(item.id), sources, options)
         RecentSceneActionStore.record(RecentSceneAction.GenerateAndIdentify)
         withContext(Dispatchers.Main) {
             Toast.makeText(context, "已送出產生預覽與 Scrape 工作", Toast.LENGTH_SHORT).show()

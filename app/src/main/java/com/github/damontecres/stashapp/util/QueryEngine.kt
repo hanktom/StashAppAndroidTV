@@ -37,6 +37,7 @@ import com.github.damontecres.stashapp.api.fragment.FullMarkerData
 import com.github.damontecres.stashapp.api.fragment.FullSceneData
 import com.github.damontecres.stashapp.api.fragment.GalleryData
 import com.github.damontecres.stashapp.api.fragment.GroupData
+import com.github.damontecres.stashapp.api.fragment.IdentifyOptionsData
 import com.github.damontecres.stashapp.api.fragment.ImageData
 import com.github.damontecres.stashapp.api.fragment.MarkerData
 import com.github.damontecres.stashapp.api.fragment.PerformerData
@@ -53,6 +54,9 @@ import com.github.damontecres.stashapp.api.type.FindFilterType
 import com.github.damontecres.stashapp.api.type.FindJobInput
 import com.github.damontecres.stashapp.api.type.GalleryFilterType
 import com.github.damontecres.stashapp.api.type.GroupFilterType
+import com.github.damontecres.stashapp.api.type.IdentifyFieldOptionsInput
+import com.github.damontecres.stashapp.api.type.IdentifyMetadataOptionsInput
+import com.github.damontecres.stashapp.api.type.IdentifySourceInput
 import com.github.damontecres.stashapp.api.type.ImageFilterType
 import com.github.damontecres.stashapp.api.type.JobStatus
 import com.github.damontecres.stashapp.api.type.MultiCriterionInput
@@ -71,6 +75,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
+
+/** Sources and global options to use for the server's "Identify" task */
+data class IdentifyDefaults(
+    val sources: List<IdentifySourceInput>,
+    val options: IdentifyMetadataOptionsInput?,
+)
 
 /**
  * Handles making graphql queries to the server
@@ -484,14 +494,16 @@ class QueryEngine(
     }
 
     /**
-     * Determines the sources to use for the server's "Identify" task: the server's configured
-     * default identify sources if any are set, otherwise one source per configured stash-box.
+     * Determines the sources and options to use for the server's "Identify" task: the server's
+     * configured default identify sources/options if any sources are set, otherwise one source per
+     * configured stash-box.
      */
-    suspend fun getIdentifySources(): List<ScraperSourceInput> {
+    suspend fun getIdentifyDefaults(): IdentifyDefaults {
         val query = IdentifyDefaultsQuery()
-        val data = executeQuery(query).data ?: return emptyList()
+        val data = executeQuery(query).data ?: return IdentifyDefaults(emptyList(), null)
+        val identify = data.configuration.defaults.identify
         val defaultSources =
-            data.configuration.defaults.identify
+            identify
                 ?.sources
                 .orEmpty()
                 .mapNotNull {
@@ -500,19 +512,50 @@ class QueryEngine(
                     if (endpoint == null && scraperId == null) {
                         null
                     } else {
-                        ScraperSourceInput(
-                            stash_box_endpoint = Optional.presentIfNotNull(endpoint),
-                            scraper_id = Optional.presentIfNotNull(scraperId),
+                        IdentifySourceInput(
+                            source =
+                                ScraperSourceInput(
+                                    stash_box_endpoint = Optional.presentIfNotNull(endpoint),
+                                    scraper_id = Optional.presentIfNotNull(scraperId),
+                                ),
+                            options = Optional.presentIfNotNull(it.options?.identifyOptionsData?.toInput()),
                         )
                     }
                 }
         if (defaultSources.isNotEmpty()) {
-            return defaultSources
+            return IdentifyDefaults(defaultSources, identify?.options?.identifyOptionsData?.toInput())
         }
-        return data.configuration.general.stashBoxes.map {
-            ScraperSourceInput(stash_box_endpoint = Optional.present(it.endpoint))
-        }
+        return IdentifyDefaults(
+            data.configuration.general.stashBoxes.map {
+                IdentifySourceInput(
+                    source = ScraperSourceInput(stash_box_endpoint = Optional.present(it.endpoint)),
+                )
+            },
+            identify?.options?.identifyOptionsData?.toInput(),
+        )
     }
+
+    private fun IdentifyOptionsData.toInput(): IdentifyMetadataOptionsInput =
+        IdentifyMetadataOptionsInput(
+            fieldOptions =
+                Optional.presentIfNotNull(
+                    fieldOptions?.map {
+                        IdentifyFieldOptionsInput(
+                            field = it.field,
+                            strategy = it.strategy,
+                            createMissing = Optional.presentIfNotNull(it.createMissing),
+                        )
+                    },
+                ),
+            setCoverImage = Optional.presentIfNotNull(setCoverImage),
+            setOrganized = Optional.presentIfNotNull(setOrganized),
+            includeMalePerformers = Optional.presentIfNotNull(includeMalePerformers),
+            performerGenders = Optional.presentIfNotNull(performerGenders),
+            skipMultipleMatches = Optional.presentIfNotNull(skipMultipleMatches),
+            skipMultipleMatchTag = Optional.presentIfNotNull(skipMultipleMatchTag),
+            skipSingleNamePerformers = Optional.presentIfNotNull(skipSingleNamePerformers),
+            skipSingleNamePerformerTag = Optional.presentIfNotNull(skipSingleNamePerformerTag),
+        )
 
     suspend fun getJob(jobId: String): StashJob? {
         val query = FindJobQuery(FindJobInput(jobId))

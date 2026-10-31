@@ -90,7 +90,13 @@ query IdentifyDefaults {
     configuration {
         defaults {
             identify {
+                options {
+                    ...IdentifyOptionsData
+                }
                 sources {
+                    options {
+                        ...IdentifyOptionsData
+                    }
                     source {
                         stash_box_endpoint
                         scraper_id

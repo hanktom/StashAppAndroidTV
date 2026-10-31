@@ -32,3 +32,19 @@ fragment StashJob on Job {
     endTime
     error
 }
+
+fragment IdentifyOptionsData on IdentifyMetadataOptions {
+    fieldOptions {
+        field
+        strategy
+        createMissing
+    }
+    setCoverImage
+    setOrganized
+    includeMalePerformers
+    performerGenders
+    skipMultipleMatches
+    skipMultipleMatchTag
+    skipSingleNamePerformers
+    skipSingleNamePerformerTag
+}

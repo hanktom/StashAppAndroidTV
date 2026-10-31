@@ -45,6 +45,7 @@ import com.github.damontecres.stashapp.api.type.GenerateMetadataInput
 import com.github.damontecres.stashapp.api.type.GroupCreateInput
 import com.github.damontecres.stashapp.api.type.GroupUpdateInput
 import com.github.damontecres.stashapp.api.type.IdentifyMetadataInput
+import com.github.damontecres.stashapp.api.type.IdentifyMetadataOptionsInput
 import com.github.damontecres.stashapp.api.type.IdentifySourceInput
 import com.github.damontecres.stashapp.api.type.ImageUpdateInput
 import com.github.damontecres.stashapp.api.type.PackageSpecInput
@@ -58,7 +59,6 @@ import com.github.damontecres.stashapp.api.type.SceneGroupInput
 import com.github.damontecres.stashapp.api.type.SceneMarkerCreateInput
 import com.github.damontecres.stashapp.api.type.SceneMarkerUpdateInput
 import com.github.damontecres.stashapp.api.type.SceneUpdateInput
-import com.github.damontecres.stashapp.api.type.ScraperSourceInput
 import com.github.damontecres.stashapp.api.type.StudioCreateInput
 import com.github.damontecres.stashapp.api.type.StudioUpdateInput
 import com.github.damontecres.stashapp.api.type.TagCreateInput
@@ -152,6 +152,9 @@ class MutationEngine(
             ),
         )
 
+    private fun getServerBooleanOrFalse(preferenceKey: String): Boolean =
+        serverPreferences?.preferences?.getBoolean(preferenceKey, false) ?: false
+
     suspend fun triggerScan(): String {
         val mutation =
             MetadataScanMutation(
@@ -172,7 +175,10 @@ class MutationEngine(
         return executeMutation(mutation).data!!.metadataScan
     }
 
-    suspend fun triggerGenerate(sceneIds: List<String>? = null): String {
+    suspend fun triggerGenerate(
+        sceneIds: List<String>? = null,
+        overwrite: Boolean? = null,
+    ): String {
         val mutation =
             MetadataGenerateMutation(
                 GenerateMetadataInput(
@@ -188,6 +194,8 @@ class MutationEngine(
                     sprites = getServerBoolean(ServerPreferences.PREF_GEN_SPRITES, true),
                     transcodes = getServerBoolean(ServerPreferences.PREF_GEN_TRANSCODES),
                     imageThumbnails = getServerBoolean(ServerPreferences.PREF_GEN_IMAGE_THUMBNAILS),
+                    overwrite = Optional.present(overwrite ?: getServerBooleanOrFalse(ServerPreferences.PREF_GEN_OVERWRITE)),
+                    previewOptions = Optional.presentIfNotNull(serverPreferences?.getGeneratePreviewOptions()),
                     sceneIDs = Optional.presentIfNotNull(sceneIds),
                 ),
             )
@@ -200,12 +208,14 @@ class MutationEngine(
      */
     suspend fun triggerIdentify(
         sceneIds: List<String>,
-        sources: List<ScraperSourceInput>,
+        sources: List<IdentifySourceInput>,
+        options: IdentifyMetadataOptionsInput? = null,
     ): String {
         val mutation =
             MetadataIdentifyMutation(
                 IdentifyMetadataInput(
-                    sources = sources.map { IdentifySourceInput(source = it) },
+                    sources = sources,
+                    options = Optional.presentIfNotNull(options),
                     sceneIDs = Optional.present(sceneIds),
                 ),
             )
