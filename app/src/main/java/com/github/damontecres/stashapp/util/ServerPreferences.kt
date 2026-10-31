@@ -4,12 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.core.content.edit
-import com.apollographql.apollo.api.Optional
 import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.StashApplication
 import com.github.damontecres.stashapp.api.ConfigurationQuery
-import com.github.damontecres.stashapp.api.type.GeneratePreviewOptionsInput
-import com.github.damontecres.stashapp.api.type.PreviewPreset
 import com.github.damontecres.stashapp.data.DataType
 import com.github.damontecres.stashapp.suppliers.FilterArgs
 import com.github.damontecres.stashapp.util.plugin.CompanionPlugin
@@ -407,79 +404,7 @@ class ServerPreferences(
                 PREF_GEN_OVERWRITE,
                 generate.getBoolean("overwrite", null, false),
             )
-
-            val previewOptions = generate?.getCaseInsensitive("previewOptions") as Map<String, *>?
-            val segments =
-                previewOptions?.getCaseInsensitive("previewSegments")?.toString()?.toIntOrNull()
-            if (segments != null) {
-                putInt(PREF_GEN_PREVIEW_SEGMENTS, segments)
-            } else {
-                remove(PREF_GEN_PREVIEW_SEGMENTS)
-            }
-            val segmentDuration =
-                previewOptions
-                    ?.getCaseInsensitive("previewSegmentDuration")
-                    ?.toString()
-                    ?.toFloatOrNull()
-            if (segmentDuration != null) {
-                putFloat(PREF_GEN_PREVIEW_SEGMENT_DURATION, segmentDuration)
-            } else {
-                remove(PREF_GEN_PREVIEW_SEGMENT_DURATION)
-            }
-            val excludeStart = previewOptions?.getCaseInsensitive("previewExcludeStart")?.toString()
-            if (excludeStart != null) {
-                putString(PREF_GEN_PREVIEW_EXCLUDE_START, excludeStart)
-            } else {
-                remove(PREF_GEN_PREVIEW_EXCLUDE_START)
-            }
-            val excludeEnd = previewOptions?.getCaseInsensitive("previewExcludeEnd")?.toString()
-            if (excludeEnd != null) {
-                putString(PREF_GEN_PREVIEW_EXCLUDE_END, excludeEnd)
-            } else {
-                remove(PREF_GEN_PREVIEW_EXCLUDE_END)
-            }
-            val preset = previewOptions?.getCaseInsensitive("previewPreset")?.toString()
-            if (preset != null) {
-                putString(PREF_GEN_PREVIEW_PRESET, preset)
-            } else {
-                remove(PREF_GEN_PREVIEW_PRESET)
-            }
         }
-
-    /**
-     * Builds the preview options the web UI saved in its generate task defaults, or null if none are stored
-     */
-    fun getGeneratePreviewOptions(): GeneratePreviewOptionsInput? {
-        val segments =
-            if (preferences.contains(PREF_GEN_PREVIEW_SEGMENTS)) {
-                preferences.getInt(PREF_GEN_PREVIEW_SEGMENTS, 0)
-            } else {
-                null
-            }
-        val segmentDuration =
-            if (preferences.contains(PREF_GEN_PREVIEW_SEGMENT_DURATION)) {
-                preferences.getFloat(PREF_GEN_PREVIEW_SEGMENT_DURATION, 0f).toDouble()
-            } else {
-                null
-            }
-        val excludeStart = preferences.getString(PREF_GEN_PREVIEW_EXCLUDE_START, null)
-        val excludeEnd = preferences.getString(PREF_GEN_PREVIEW_EXCLUDE_END, null)
-        val preset =
-            preferences
-                .getString(PREF_GEN_PREVIEW_PRESET, null)
-                ?.let { PreviewPreset.safeValueOf(it) }
-                ?.takeIf { it != PreviewPreset.UNKNOWN__ }
-        if (segments == null && segmentDuration == null && excludeStart == null && excludeEnd == null && preset == null) {
-            return null
-        }
-        return GeneratePreviewOptionsInput(
-            previewSegments = Optional.presentIfNotNull(segments),
-            previewSegmentDuration = Optional.presentIfNotNull(segmentDuration),
-            previewExcludeStart = Optional.presentIfNotNull(excludeStart),
-            previewExcludeEnd = Optional.presentIfNotNull(excludeEnd),
-            previewPreset = Optional.presentIfNotNull(preset),
-        )
-    }
 
     private fun Map<String, *>?.getBoolean(
         key: String,
@@ -547,11 +472,6 @@ class ServerPreferences(
         const val PREF_GEN_TRANSCODES = "generate.transcodes"
         const val PREF_GEN_IMAGE_THUMBNAILS = "generate.imageThumbnails"
         const val PREF_GEN_OVERWRITE = "generate.overwrite"
-        const val PREF_GEN_PREVIEW_SEGMENTS = "generate.previewOptions.previewSegments"
-        const val PREF_GEN_PREVIEW_SEGMENT_DURATION = "generate.previewOptions.previewSegmentDuration"
-        const val PREF_GEN_PREVIEW_EXCLUDE_START = "generate.previewOptions.previewExcludeStart"
-        const val PREF_GEN_PREVIEW_EXCLUDE_END = "generate.previewOptions.previewExcludeEnd"
-        const val PREF_GEN_PREVIEW_PRESET = "generate.previewOptions.previewPreset"
 
         const val PREF_INTERFACE_MENU_ITEMS = "interface.menuItems"
         const val PREF_INTERFACE_STUDIOS_AS_TEXT = "interface.showStudioAsText"

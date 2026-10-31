@@ -195,7 +195,6 @@ class MutationEngine(
                     transcodes = getServerBoolean(ServerPreferences.PREF_GEN_TRANSCODES),
                     imageThumbnails = getServerBoolean(ServerPreferences.PREF_GEN_IMAGE_THUMBNAILS),
                     overwrite = Optional.present(overwrite ?: getServerBooleanOrFalse(ServerPreferences.PREF_GEN_OVERWRITE)),
-                    previewOptions = Optional.presentIfNotNull(serverPreferences?.getGeneratePreviewOptions()),
                     sceneIDs = Optional.presentIfNotNull(sceneIds),
                 ),
             )

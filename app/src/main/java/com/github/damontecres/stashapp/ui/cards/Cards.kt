@@ -1,5 +1,6 @@
 package com.github.damontecres.stashapp.ui.cards
 
+import android.util.Log
 import androidx.annotation.DrawableRes
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -55,6 +56,9 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
@@ -345,6 +349,27 @@ fun RootCard(
                     player.setMediaItem(mediaItem, C.TIME_UNSET)
                     player.playWhenReady = true
                     player.prepare()
+                }
+                // A preview without a video track (e.g. a broken audio-only preview) or one that
+                // fails to play would otherwise be restarted nonstop by REPEAT_MODE_ONE, re-fetching
+                // the file many times per second.
+                DisposableEffect(player) {
+                    val listener =
+                        object : Player.Listener {
+                            override fun onTracksChanged(tracks: Tracks) {
+                                if (!tracks.isEmpty && !tracks.containsType(C.TRACK_TYPE_VIDEO)) {
+                                    Log.w("Cards", "Preview has no video track, stopping: $videoUrl")
+                                    player.stop()
+                                }
+                            }
+
+                            override fun onPlayerError(error: PlaybackException) {
+                                Log.w("Cards", "Preview playback failed, stopping: $videoUrl", error)
+                                player.stop()
+                            }
+                        }
+                    player.addListener(listener)
+                    onDispose { player.removeListener(listener) }
                 }
                 LifecycleStartEffect(Unit) {
                     onStopOrDispose {
