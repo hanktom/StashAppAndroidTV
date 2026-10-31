@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -293,34 +294,37 @@ fun StashGridControls(
                 }
             }
         }
-        StashGrid(
-            pager,
-            uiConfig,
-            itemOnClick,
-            longClicker,
-            requestFocus = shouldRequestFocus,
-            letterPosition = letterPosition,
-            initialPosition = initialPosition,
-            restorePosition = restorePosition,
-            positionCallback = { columns, position ->
-                showTopRowRaw = position < columns
-                positionCallback?.invoke(columns, position)
-            },
-            gridFocusRequester = gridFocusRequester,
-            cardContext = cardContext,
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .focusProperties {
-                        exit = {
-                            if (it == FocusDirection.Up) {
-                                rowFocusRequester
-                            } else {
-                                FocusRequester.Default
+        // Rebuild the grid state when the pager is replaced (sort, search, saved filter)
+        key(pager.filter) {
+            StashGrid(
+                pager,
+                uiConfig,
+                itemOnClick,
+                longClicker,
+                requestFocus = shouldRequestFocus,
+                letterPosition = letterPosition,
+                initialPosition = initialPosition,
+                restorePosition = restorePosition,
+                positionCallback = { columns, position ->
+                    showTopRowRaw = position < columns
+                    positionCallback?.invoke(columns, position)
+                },
+                gridFocusRequester = gridFocusRequester,
+                cardContext = cardContext,
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .focusProperties {
+                            exit = {
+                                if (it == FocusDirection.Up) {
+                                    rowFocusRequester
+                                } else {
+                                    FocusRequester.Default
+                                }
                             }
-                        }
-                    },
-        )
+                        },
+            )
+        }
     }
     if (showMarkerDialog) {
         MarkerDurationDialog(
@@ -402,8 +406,9 @@ fun StashGrid(
                 firstFocus.tryRequestFocus()
                 pendingRestore = -1
             }
+            hasRequestFocusRun = true
         } else {
-            if (pendingRestore > 0 && focusedIndex < 0) {
+            if (pendingRestore > 0) {
                 // The caller isn't requesting focus (e.g. a tab grid): scroll to the remembered
                 // position, but don't request focus since the tab row / top row owns it right now.
                 // Focus lands on this item when the user enters the grid (see onEnter below).
@@ -427,7 +432,8 @@ fun StashGrid(
     val context = LocalContext.current
     val showJumpButtons = uiConfig.preferences.interfacePreferences.showGridJumpButtons
 
-    var alphabetFocus by remember { mutableStateOf(false) }
+    // Set to request focus on the item at savedFocusedIndex once the grid has recomposed
+    var pendingFocusRequest by remember { mutableStateOf(false) }
     val focusOn = { index: Int ->
         if (DEBUG) Log.v(TAG, "focusOn: focusedIndex=$focusedIndex, index=$index")
         if (index != focusedIndex) {
@@ -450,30 +456,18 @@ fun StashGrid(
     }
 
     // Wait for a recomposition to focus
-    LaunchedEffect(alphabetFocus) {
-        if (alphabetFocus) {
+    LaunchedEffect(pendingFocusRequest) {
+        if (pendingFocusRequest) {
             firstFocus.tryRequestFocus()
         }
-        alphabetFocus = false
+        pendingFocusRequest = false
     }
 
     val useBackToJump = uiConfig.preferences.interfacePreferences.scrollTopOnBack
     val showFooter = uiConfig.preferences.interfacePreferences.showPositionFooter
     val useJumpRemoteButtons = uiConfig.preferences.interfacePreferences.pageWithRemoteButtons
-    val jump2 =
-        remember {
-            if (pager.size >= 25_000) {
-                columns * 2000
-            } else if (pager.size >= 7_000) {
-                columns * 200
-            } else if (pager.size >= 2_000) {
-                columns * 50
-            } else {
-                columns * 20
-            }
-        }
     val jump1 =
-        remember {
+        remember(pager.size, columns) {
             if (pager.size >= 25_000) {
                 columns * 500
             } else if (pager.size >= 7_000) {
@@ -485,15 +479,38 @@ fun StashGrid(
             }
         }
 
-    val jump = { jump: Int ->
-        scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
-            val newPosition =
-                (gridState.firstVisibleItemIndex + jump).coerceIn(0..<pager.size)
-            if (DEBUG) Log.d(TAG, "newPosition=$newPosition")
-            savedFocusedIndex = newPosition
-            focusOn(newPosition)
-            gridState.scrollToItem(newPosition, 0)
+    // Jump to an absolute position
+    val jumpTo: (Int) -> Unit = { target ->
+        if (pager.size > 0) {
+            // If the grid itself is focused (e.g. remote buttons), focus moves to the new item
+            val gridFocused = focusedIndex >= 0
+            scope.launch(StashCoroutineExceptionHandler(autoToast = true)) {
+                val newPosition = target.coerceIn(0, pager.size - 1)
+                if (DEBUG) Log.d(TAG, "newPosition=$newPosition, gridFocused=$gridFocused")
+                // Remember the position so entering the grid or repeated jumps start from here
+                savedFocusedIndex = newPosition
+                focusedIndexOnExit = newPosition
+                if (gridFocused) {
+                    focusOn(newPosition)
+                }
+                gridState.scrollToItem(newPosition, 0)
+                positionCallback?.invoke(columns, newPosition)
+                positionKey?.let { GridPositionStore.save(server.url, it, newPosition) }
+                if (gridFocused) {
+                    pendingFocusRequest = true
+                }
+            }
         }
+    }
+    // Jump relative to the current item
+    val jump: (Int) -> Unit = { delta ->
+        val base =
+            when {
+                focusedIndex >= 0 -> focusedIndex
+                focusedIndexOnExit >= 0 -> focusedIndexOnExit
+                else -> gridState.firstVisibleItemIndex
+            }
+        jumpTo(base + delta)
     }
     val jumpToTop = {
         scope.launch(StashCoroutineExceptionHandler()) {
@@ -566,8 +583,9 @@ fun StashGrid(
         if (showJumpButtons && pager.size > 0) {
             JumpButtons(
                 jump1 = jump1,
-                jump2 = jump2,
                 jumpClick = { jump(it) },
+                jumpToStart = { jumpTo(0) },
+                jumpToEnd = { jumpTo(pager.size - 1) },
                 modifier = Modifier.align(Alignment.CenterVertically),
             )
         }
@@ -597,9 +615,10 @@ fun StashGrid(
                                 if (pendingRestore in 1..<pager.size) {
                                     val restoreIndex = pendingRestore
                                     pendingRestore = -1
-                                    if (focusedIndex < 0) {
-                                        focusedIndex = restoreIndex
-                                    }
+                                    focusedIndex = restoreIndex
+                                    firstFocus.tryRequestFocus()
+                                } else if (savedFocusedIndex in 0..<pager.size) {
+                                    // E.g. after a jump button press, land on the jumped-to item
                                     firstFocus.tryRequestFocus()
                                 } else if (focusedIndex < 0 && gridState.firstVisibleItemIndex <= startPosition) {
                                     focusedIndex = startPosition
@@ -620,7 +639,7 @@ fun StashGrid(
                             Modifier
                         }
                     val item = pager[index]
-                    if (!hasRequestFocusRun && requestFocus && initialPosition >= 0) {
+                    if (!hasRequestFocusRun && requestFocus && initialPosition >= 0 && index == resolvedStart) {
                         // On very first composition, if parent wants to focus on the grid, do so
                         LaunchedEffect(Unit) {
                             if (DEBUG) {
@@ -743,7 +762,7 @@ fun StashGrid(
                         Log.d(TAG, "Alphabet jump to $jumpPosition")
                         gridState.scrollToItem(jumpPosition)
                         focusOn(jumpPosition)
-                        alphabetFocus = true
+                        pendingFocusRequest = true
 //                        firstFocus.tryRequestFocus()
                     }
                 },
@@ -755,33 +774,31 @@ fun StashGrid(
 @Composable
 fun JumpButtons(
     jump1: Int,
-    jump2: Int,
     jumpClick: (Int) -> Unit,
+    jumpToStart: () -> Unit,
+    jumpToEnd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier,
     ) {
-        JumpButton(R.string.fa_angles_up, -jump2, jumpClick)
-        JumpButton(R.string.fa_angle_up, -jump1, jumpClick)
-        JumpButton(R.string.fa_angle_down, jump1, jumpClick)
-        JumpButton(R.string.fa_angles_down, jump2, jumpClick)
+        JumpButton(R.string.fa_angles_up) { jumpToStart() }
+        JumpButton(R.string.fa_angle_up) { jumpClick(-jump1) }
+        JumpButton(R.string.fa_angle_down) { jumpClick(jump1) }
+        JumpButton(R.string.fa_angles_down) { jumpToEnd() }
     }
 }
 
 @Composable
 fun JumpButton(
     @StringRes stringRes: Int,
-    jumpAmount: Int,
-    jumpClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit,
 ) {
     Button(
         modifier = modifier.width(40.dp),
         contentPadding = PaddingValues(4.dp),
-        onClick = {
-            jumpClick.invoke(jumpAmount)
-        },
+        onClick = onClick,
     ) {
         Text(text = stringResource(stringRes), fontFamily = FontAwesome)
     }
