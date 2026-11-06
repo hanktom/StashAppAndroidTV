@@ -34,7 +34,10 @@ import com.github.damontecres.stashapp.R
 import com.github.damontecres.stashapp.SearchForFragment
 import com.github.damontecres.stashapp.SearchForFragment.Companion.DATA_TYPE_SUGGESTIONS
 import com.github.damontecres.stashapp.StashApplication
+import com.github.damontecres.stashapp.api.fragment.PerformerData
 import com.github.damontecres.stashapp.api.fragment.StashData
+import com.github.damontecres.stashapp.api.fragment.StudioData
+import com.github.damontecres.stashapp.api.fragment.TagData
 import com.github.damontecres.stashapp.api.type.CriterionModifier
 import com.github.damontecres.stashapp.api.type.FindFilterType
 import com.github.damontecres.stashapp.api.type.GalleryFilterType
@@ -71,8 +74,14 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "SearchForPage"
 
-// Search results when picking an item to add; the general search setting is often lower
-private const val SEARCH_RESULTS_MIN = 100
+private val StashData.isFavorite: Boolean
+    get() =
+        when (this) {
+            is PerformerData -> favorite
+            is TagData -> favorite
+            is StudioData -> favorite
+            else -> false
+        }
 
 sealed interface SearchState {
     data object NoQuery : SearchState
@@ -213,14 +222,16 @@ fun SearchForPage(
                     delay(searchDelay)
                     results = SearchState.Pending
                     Log.v(TAG, "Starting search")
+                    // per_page = -1 returns every match; favorites first, otherwise keep the server's order
                     val items =
-                        queryEngine.find(
-                            dataType,
-                            FindFilterType(
-                                q = Optional.present(query),
-                                per_page = Optional.present(maxOf(perPage, SEARCH_RESULTS_MIN)),
-                            ),
-                        )
+                        queryEngine
+                            .find(
+                                dataType,
+                                FindFilterType(
+                                    q = Optional.present(query),
+                                    per_page = Optional.present(-1),
+                                ),
+                            ).sortedByDescending { it.isFavorite }
                     results =
                         if (items.isEmpty()) {
                             SearchState.NoResults
@@ -300,6 +311,7 @@ fun SearchForPage(
             val sortBy =
                 when (dataType) {
                     DataType.GALLERY -> SortOption.ImagesCount
+                    DataType.PERFORMER -> SortOption.Rating
                     else -> SortOption.ScenesCount
                 }
             val filter =
