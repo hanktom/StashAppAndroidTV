@@ -372,6 +372,8 @@ class DefaultLongClicker(
                                 DialogParams(
                                     fromLongClick = false,
                                     title = "確定刪除「$title」？",
+                                    // 預設焦點落在「刪除影片與檔案」
+                                    initialFocusIndex = 1,
                                     items =
                                         listOf(
                                             DialogItem("取消") {},

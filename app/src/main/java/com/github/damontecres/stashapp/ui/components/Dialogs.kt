@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -139,9 +141,18 @@ fun DialogPopup(
     dismissOnClick: Boolean = true,
     waitToLoad: Boolean = true,
     properties: DialogProperties = DialogProperties(),
+    initialFocusIndex: Int = 0,
 ) {
     var waiting by remember { mutableStateOf(waitToLoad) }
+    val initialFocusRequester = remember { FocusRequester() }
     if (showDialog) {
+        if (initialFocusIndex > 0) {
+            LaunchedEffect(Unit) {
+                // Give the dialog a frame to lay out, then move focus to the requested item
+                delay(100)
+                runCatching { initialFocusRequester.requestFocus() }
+            }
+        }
         if (waitToLoad) {
             LaunchedEffect(Unit) {
                 // This is a hack because a long click will propagate here and click the first list item
@@ -191,7 +202,7 @@ fun DialogPopup(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-                items(dialogItems) {
+                itemsIndexed(dialogItems) { index, it ->
                     when (it) {
                         is DialogItemDivider -> {
                             HorizontalDivider(Modifier.height(16.dp))
@@ -212,7 +223,12 @@ fun DialogPopup(
                                 supportingContent = it.supportingContent,
                                 leadingContent = it.leadingContent,
                                 trailingContent = it.trailingContent,
-                                modifier = Modifier,
+                                modifier =
+                                    if (index == initialFocusIndex) {
+                                        Modifier.focusRequester(initialFocusRequester)
+                                    } else {
+                                        Modifier
+                                    },
                             )
                         }
                     }

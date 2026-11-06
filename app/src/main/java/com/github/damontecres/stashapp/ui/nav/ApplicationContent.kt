@@ -291,6 +291,7 @@ fun ApplicationContent(
                 dismissOnClick = true,
                 waitToLoad = params.fromLongClick,
                 properties = DialogProperties(),
+                initialFocusIndex = params.initialFocusIndex,
             )
         }
         if (showMarkerDialog != null) {

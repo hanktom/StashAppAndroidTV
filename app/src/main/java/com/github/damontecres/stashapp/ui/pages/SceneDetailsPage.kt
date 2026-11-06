@@ -235,6 +235,8 @@ data class DialogParams(
     val fromLongClick: Boolean,
     val title: String,
     val items: List<DialogItem>,
+    /** Index into [items] that should hold focus when the dialog opens */
+    val initialFocusIndex: Int = 0,
 )
 
 @Composable
@@ -601,6 +603,7 @@ fun SceneDetails(
             dialogItems = params.items,
             onDismissRequest = { showDialog = null },
             waitToLoad = params.fromLongClick,
+            initialFocusIndex = params.initialFocusIndex,
         )
     }
     SearchForDialog(
